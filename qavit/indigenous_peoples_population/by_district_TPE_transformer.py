@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Read three Big5 encoded CSV files
-prefix = "indigenous_population_by_district_TPE_"
+prefix = "by_district_TPE_"
 encoding = "big5"
 df_109 = pd.read_csv(f"{prefix}109.csv", encoding=encoding)
 df_110 = pd.read_csv(f"{prefix}110.csv", encoding=encoding)
@@ -36,3 +36,4 @@ df_combined = df_combined.sort_values(by=["year", "month", "district", "gender"]
 
 # Save to CSV
 df_combined.to_csv(f"{prefix}combined.csv", index=False, encoding="utf-8")
+print(f"✅ Saved to {prefix}combined.csv")
