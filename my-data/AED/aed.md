@@ -22,7 +22,7 @@ INSERT INTO component_charts (
 )
 VALUES (
   'aed',
-  ARRAY[#fc038c],
+  ARRAY['#fc038c'],
   ARRAY['DistrictChart', 'ColumnChart'],
   '處'
 )
@@ -32,11 +32,7 @@ VALUES (
 
 ```sql
 INSERT INTO component_maps (
-  index,
-  title,
-  type,
-  source,
-  property
+  index, title, type, source, property
 ) VALUES (
   'aed_map',
   '自動體外心臟去顫器放置地點',
@@ -60,18 +56,8 @@ INSERT INTO component_maps (
 
 ```sql
 INSERT INTO query_charts (
-  index,
-  time_from,
-  source,
-  short_desc,
-  long_desc,
-  use_case,
-  links,
-  contributors,
-  created_at,
-  updated_at,
-  query_type,
-  query_chart,
+  index, time_from, source, short_desc, long_desc, use_case, links,
+  contributors, created_at, updated_at, query_type, query_chart,
   city
 )
 VALUES (
