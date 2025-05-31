@@ -18,8 +18,8 @@ def filter_taipei_new_taipei(input_file, output_file):
         df = pd.read_csv(input_file)
         
         # 篩選出臺北市或新北市的資料
-        print("正在篩選臺北市和新北市的據點...")
-        filtered_df = df[df['縣市'].isin(['臺北市', '新北市'])]
+        print("正在篩選新北市的據點...")
+        filtered_df = df[df['縣市'].isin(['新北市'])]
         
         # 儲存結果
         filtered_df.to_csv(output_file, index=False, encoding='utf-8-sig')
@@ -39,8 +39,8 @@ def filter_taipei_new_taipei(input_file, output_file):
 def main():
     # 設定檔案路徑
     data_dir = Path("/Users/siniuho/Labs/Taipei-City-Dashboard/my-data/長照/")
-    input_file = data_dir / "長照ABC據點_行政區轉換後_v2.csv"
-    output_file = data_dir / "長照ABC據點_雙北地區.csv"
+    input_file = data_dir / "長照ABC據點_行政區轉換後_v3.csv"
+    output_file = data_dir / "長照ABC據點_新北市.csv"
     
     # 執行篩選
     result_df = filter_taipei_new_taipei(input_file, output_file)
