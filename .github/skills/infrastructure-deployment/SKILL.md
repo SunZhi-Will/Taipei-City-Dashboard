@@ -63,6 +63,36 @@ applyTo: "docker/**,helm-chart/**"
    └─ 日誌輸出 (stdout/stderr, 不檔案)
 ```
 
+### Phase 1.5: 🆕 本地快速部署（VS Code F5）
+
+**新增：一鍵智能部署腳本** (`.vscode/scripts/docker-task.ps1`)
+
+優點：
+- ✅ 自動檢查 `.env` 是否存在，不存在自動從 template 複製
+- ✅ 自動建立 Docker 網路 (`br_dashboard`)
+- ✅ 智能判斷是否需初始化：首次自動執行 DB schema 遷移
+- ✅ Windows Docker + WSL Docker 自動 fallback
+- ✅ 清楚的彩色提示訊息
+
+使用方式：
+```bash
+# F5 快速啟動
+F5 → "F5: Docker Quick Deploy"  # 智能判斷是否需初始化
+F5 → "F5: Docker Full Bootstrap" # 強制重新初始化
+F5 → "docker:down"               # 停止所有服務
+```
+
+Tasks 定義：
+- `docker:quick-up` - 快速啟動（首次自動初始化，之後只啟動）
+- `docker:bootstrap-full` - 完整重新初始化
+- `docker:down` - 停止服務
+
+關鍵改進：
+1. **自動 .env 生成** → 從 `docker/.env.template` 複製
+2. **首次偵測** → 檢查 `postgres_data` volume 是否存在
+3. **智能初始化** → 首次自動跑 `docker-compose-init.yaml`
+4. **WSL 支持** → 自動檢測 WSL docker，無需手動配置
+
 ### Phase 2: Docker Compose 本地開發
 ```
 4. 服務組態設定

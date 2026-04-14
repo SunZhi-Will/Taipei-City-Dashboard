@@ -11,7 +11,7 @@
           "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
         }
       },
-      "command": "if (-not (docker network ls --format \"{{.Name}}\" | Select-String -Pattern \"^br_dashboard$\" -Quiet)) { docker network create --driver=bridge --subnet=192.168.128.0/24 --gateway=192.168.128.1 br_dashboard | Out-Null }; docker compose -f docker-compose-db.yaml up -d; docker compose -f docker-compose.yaml up -d; docker compose -f docker-compose.yaml ps",
+      "command": "& \"${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1\" -Action quick-up",
       "problemMatcher": []
     },
     {
@@ -24,7 +24,7 @@
           "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
         }
       },
-      "command": "if (-not (docker network ls --format \"{{.Name}}\" | Select-String -Pattern \"^br_dashboard$\" -Quiet)) { docker network create --driver=bridge --subnet=192.168.128.0/24 --gateway=192.168.128.1 br_dashboard | Out-Null }; docker compose -f docker-compose-db.yaml up -d; docker compose -f docker-compose-init.yaml up -d; docker compose -f docker-compose.yaml up -d; docker compose -f docker-compose.yaml ps",
+      "command": "& \"${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1\" -Action bootstrap-full",
       "problemMatcher": []
     },
     {
@@ -37,7 +37,7 @@
           "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
         }
       },
-      "command": "docker compose -f docker-compose.yaml down; docker compose -f docker-compose-db.yaml down",
+      "command": "& \"${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1\" -Action down",
       "problemMatcher": []
     }
   ]

@@ -84,6 +84,31 @@ export const useContentStore = defineStore("content", {
 		setMapLayerData(index, component) {
 			this.mapLayers[index] = component;
 		},
+		async requestWithRetry(requestFn, options = {}) {
+			const {
+				maxAttempts = 5,
+				delayMs = 1200,
+				retryStatuses = [502, 503, 504],
+			} = options;
+
+			for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+				try {
+					return await requestFn();
+				} catch (error) {
+					const status = error?.response?.status;
+					const canRetry =
+						(!status && error?.code) || retryStatuses.includes(status);
+
+					if (!canRetry || attempt === maxAttempts) {
+						throw error;
+					}
+
+					await new Promise((resolve) =>
+						setTimeout(resolve, delayMs * attempt),
+					);
+				}
+			}
+		},
 		/* Steps in adding content to the application (/dashboard or /mapview) */
 		// 1. Check the current path and execute actions based on the current path
 		setRouteParams(mode, index, city) {
@@ -124,7 +149,13 @@ export const useContentStore = defineStore("content", {
 		},
 		// 2. Call an API to get all dashboard info and reroute the user to the first dashboard in the list
 		async setDashboards(onlyDashboard = false) {
-			const response = await http.get(`/dashboard/`);
+			const response = await this.requestWithRetry(
+				() => http.get(`/dashboard/`),
+				{
+					maxAttempts: 6,
+					delayMs: 1000,
+				},
+			);
 			const data = response.data.data || {};
 
 			this.dashboards.clear();
@@ -688,7 +719,10 @@ export const useContentStore = defineStore("content", {
 		},
 		// 6. Call an API to get contributor data (result consists of id, name, link)
 		setContributors() {
-			http.get(`/contributor/`)
+			this.requestWithRetry(() => http.get(`/contributor/`), {
+				maxAttempts: 6,
+				delayMs: 1000,
+			})
 				.then((rs) => {
 					const contributors = {};
 					rs.data.data.forEach((item) => {

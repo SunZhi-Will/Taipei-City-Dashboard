@@ -1,6 +1,6 @@
 # Taipei City Dashboard - Agent Skills 完整指南
 
-> 針對 Taipei City Dashboard 專案設計的 8 個高專精 agent skill，涵蓋全棧開發、資料工程、基礎設施、AI 特性與發佈管理。
+> 針對 Taipei City Dashboard 專案設計的 9 個高專精 agent skill，涵蓋全棧開發、資料工程、基礎設施、AI 特性與發佈管理，以及 Copilot 技能治理。
 
 ---
 
@@ -16,6 +16,7 @@
 | 6️⃣ | **ai-feature-development** | AI/LLM | LangChain、向量搜尋、聊天機器人 | P1 | `/ai-feature` |
 | 7️⃣ | **infrastructure-deployment** | 基礎設施 | Docker、Kubernetes、Helm、監控 | P1 | `/infra-deploy` |
 | 8️⃣ | **component-integration-fullstack** | 發佈管理 | 端對端組件發佈、整合測試、監控 | P0 | `/fullstack` |
+| 9️⃣ | **agent-skill-authoring** | Copilot 治理 | 新增/修改 Skill、Instruction、Agent 設定 | P0 | `/agent-skill` |
 
 ---
 
@@ -88,6 +89,14 @@
 │         ├─ 金絲雀部署
 │         └─ 監控與反饋
 └─ 無相符 Skill，使用標准 Agent
+
+我要新增/修改 Copilot 的 Skill、Instruction、Agent 設定?
+├─ YES → agent-skill-authoring
+│         ├─ 判斷 Skill vs Instruction vs Agent
+│         ├─ 撰寫正確 frontmatter
+│         ├─ 控制 applyTo 範圍
+│         └─ 同步技能入口與人讀文檔
+└─ NO → 依上方領域技能選用
 ```
 
 ---
@@ -207,13 +216,31 @@ Phase 6: 發佈
 
 ## 🚀 快速開始
 
-### 首次使用
+### 0️⃣ 部署環境（首先做這個）
+
+按 **F5** 一鍵快速部署所有容器：
+```powershell
+# VS Code 中
+F5 → "F5: Docker Quick Deploy"
+# 或
+F5 → "F5: Docker Full Bootstrap" (首次完整初始化)
+```
+
+✅ **自動完成**：
+- .env 檔案檢查與生成
+- Docker 網路建立
+- DB 初始化（首次）
+- 前後端與資料庫啟動
+
+📖 詳見：[DOCKER_QUICK_START.md](../../DOCKER_QUICK_START.md)
+
+### 1️⃣ 首次選擇 Skill
 1. **閱讀此指南** → 理解 Skill 全景
-2. **選擇相符的 Skill** → 使用決策樹
+2. **查看決策樹** → 根據工作選擇 Skill
 3. **開啟 Skill 文件** → `.github/skills/<name>/SKILL.md`
 4. **依照工作流程** → Phase by Phase 執行
 
-### 在 VS Code Copilot 中啟用
+### 2️⃣ 在 VS Code Copilot 中啟用
 ```
 # 在聊天框輸入 /
 # 搜尋對應的 Skill 名稱
@@ -223,6 +250,7 @@ Phase 6: 發佈
 /backend-api
 /frontend-component
 /data-pipeline
+/infra-deploy  ← 部署與基礎設施 (新！)
 ```
 
 ---

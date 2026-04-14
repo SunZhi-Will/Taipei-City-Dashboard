@@ -10,12 +10,21 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl
     ports:
       - 80:80
-      - 443:443
+    depends_on:
+      dashboard-fe:
+        condition: service_started
+      dashboard-be:
+        condition: service_started
 
   dashboard-fe:
     image: node:${NODE_IMAGE_TAG:-latest}
     container_name: dashboard-fe
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
     environment:
       DOCKER_COMPOSE: "true"
       NODE_ENV: ${NODE_ENV}
@@ -43,6 +52,11 @@ services:
       dockerfile: Dockerfile
     container_name: dashboard-be
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
     environment:
       GIN_MODE: ${GIN_MODE}
       GIN_DOMAIN: ${GIN_DOMAIN}
