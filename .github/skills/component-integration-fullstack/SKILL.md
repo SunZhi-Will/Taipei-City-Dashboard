@@ -1,7 +1,7 @@
 ---
 name: component-integration-fullstack
 description: "Use when: 整合完整儀表板組件，端對端：需求→設計→BE endpoint→FE UI→資料管道→部署；涉及多層協調、API 契約、狀態管理、效能最佳化。適用於重大功能發佈、儀表板重構、功能完整性驗收。"
-applyTo: "**"
+applyTo: "Taipei-City-Dashboard-BE/**,Taipei-City-Dashboard-FE/**,Taipei-City-Dashboard-DE/**,docker/**,helm-chart/**,user-added/2026-this-year/docs/**"
 ---
 
 # 全棧組件整合與發佈 Skill
@@ -345,8 +345,8 @@ applyTo: "**"
 
 ## 📚 參考檔案
 
-- **需求與設計**: [analysis/2026-04-14_hackathon_update_analysis.md](../analysis/2026-04-14_hackathon_update_analysis.md)
-- **後端實現**: [Taipei-City-Dashboard-BE/app/](../Taipei-City-Dashboard-BE/app/)
-- **前端實現**: [Taipei-City-Dashboard-FE/src/](../Taipei-City-Dashboard-FE/src/)
-- **資料管道**: [Taipei-City-Dashboard-DE/dags/](../Taipei-City-Dashboard-DE/dags/)
+- **需求與設計**: [2026-04-14_hackathon_update_analysis.md](../../../user-added/2026-this-year/docs/05-archives/2026-04-14_hackathon_update_analysis.md)
+- **後端實現**: [Taipei-City-Dashboard-BE/app/](../../../Taipei-City-Dashboard-BE/app/)
+- **前端實現**: [Taipei-City-Dashboard-FE/src/](../../../Taipei-City-Dashboard-FE/src/)
+- **資料管道**: [Taipei-City-Dashboard-DE/dags/](../../../Taipei-City-Dashboard-DE/dags/)
 - **API 文件**: https://citydashboard.taipei/documentation/

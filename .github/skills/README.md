@@ -4,6 +4,54 @@
 
 ---
 
+## 🛡️ Skill 治理更新（2026-04-15）
+
+為避免 Skill 被過度觸發並增加上下文負擔，已將過寬 `applyTo: "**"` 收斂為明確路徑範圍。
+
+| Skill | 調整前 | 調整後 |
+|------|--------|--------|
+| `component-integration-fullstack` | `**` | `Taipei-City-Dashboard-BE/**,Taipei-City-Dashboard-FE/**,Taipei-City-Dashboard-DE/**,docker/**,helm-chart/**,user-added/2026-this-year/docs/**` |
+| `data-theme-integration` | `**` | `Taipei-City-Dashboard-DE/**,Taipei-City-Dashboard-BE/**,Taipei-City-Dashboard-FE/**,user-added/2026-this-year/docs/**` |
+
+治理原則：
+1. `applyTo` 必須對準真實工作檔案，避免全域匹配。
+2. Skill 變更後同步更新本文件，確保團隊可追溯。
+3. 新增 Skill 優先先定義範圍，再撰寫流程內容。
+
+### 治理檢核表（每次修改 Skill 後執行）
+
+- [ ] Frontmatter 具備 `name`、`description`、`applyTo`
+- [ ] `description` 含 `Use when:` 且具體可觸發
+- [ ] `applyTo` 未使用過寬全域範圍（避免 `**`）
+- [ ] `.github/skills/README.md` 已同步入口或治理變更
+- [ ] Skill 內部連結可點擊且路徑存在
+- [ ] 未修改非需求範圍官方檔案（如 workflows、根 README）
+
+### 稽核命令（快速巡檢）
+
+若本機有 `rg`：
+
+```powershell
+rg -n "^name:|^description:|^applyTo:" .github/skills/**/SKILL.md
+```
+
+若本機沒有 `rg`（PowerShell 備援）：
+
+```powershell
+Get-ChildItem .github/skills -Recurse -Filter SKILL.md |
+   Select-String -Pattern '^(name:|description:|applyTo:)' |
+   ForEach-Object { "{0}:{1} {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim() }
+```
+
+檢查過寬範圍（確認無 `applyTo: "**"`）：
+
+```powershell
+Get-ChildItem .github/skills -Recurse -Filter SKILL.md |
+   Select-String -Pattern '^applyTo:\s*"\*\*"'
+```
+
+---
+
 ## 🎯 Skill 導航與優先級
 
 | # | Skill 名稱 | 領域 | 適用場景 | 優先級 | 快速啟動 |

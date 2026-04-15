@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('quick-up', 'bootstrap-full', 'down')]
+    [ValidateSet('quick-up', 'bootstrap-full', 'down', 'status')]
     [string]$Action = 'quick-up'
 )
 
@@ -49,6 +49,7 @@ function Use-WindowsDocker {
             & $DockerCmd compose -f docker-compose-init.yaml up
         }
         & $DockerCmd compose -f docker-compose-db.yaml up -d
+        & $DockerCmd compose -f docker-compose.yaml up -d --build dashboard-be
         & $DockerCmd compose -f docker-compose.yaml up -d
         Write-Host ""
         Write-Host "OK: Services started. Check status below:" -ForegroundColor Green
@@ -60,6 +61,7 @@ function Use-WindowsDocker {
         & $DockerCmd compose -f docker-compose-db.yaml up -d
         Start-Sleep -Seconds 5
         & $DockerCmd compose -f docker-compose-init.yaml up
+        & $DockerCmd compose -f docker-compose.yaml up -d --build dashboard-be
         & $DockerCmd compose -f docker-compose.yaml up -d
         Write-Host ""
         Write-Host "OK: Bootstrap complete. Services started:" -ForegroundColor Green
@@ -72,6 +74,13 @@ function Use-WindowsDocker {
         & $DockerCmd compose -f docker-compose.yaml down
         & $DockerCmd compose -f docker-compose-db.yaml down
         Write-Host "OK: Services stopped" -ForegroundColor Green
+        return
+    }
+
+    if ($ActionName -eq 'status') {
+        Write-Host "INFO: Checking service status..." -ForegroundColor Cyan
+        & $DockerCmd compose -f docker-compose-db.yaml ps
+        & $DockerCmd compose -f docker-compose.yaml ps
         return
     }
 }
@@ -95,7 +104,7 @@ function Use-WSLDocker {
             Write-Host "INFO: First-time setup detected. Running bootstrap..." -ForegroundColor Cyan
             & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard"
         }
-        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && docker compose -f docker-compose.yaml up -d"
+        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && docker compose -f docker-compose.yaml up -d --build dashboard-be && docker compose -f docker-compose.yaml up -d"
         Write-Host ""
         Write-Host "OK: Services started. Check status below:" -ForegroundColor Green
         & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose.yaml ps"
@@ -103,7 +112,7 @@ function Use-WSLDocker {
     }
 
     if ($ActionName -eq 'bootstrap-full') {
-        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose.yaml up -d"
+        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose.yaml up -d --build dashboard-be && docker compose -f docker-compose.yaml up -d"
         Write-Host ""
         Write-Host "OK: Bootstrap complete. Services started:" -ForegroundColor Green
         & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose.yaml ps"
@@ -114,6 +123,12 @@ function Use-WSLDocker {
         Write-Host "INFO: Stopping all services..." -ForegroundColor Cyan
         & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose.yaml down && docker compose -f docker-compose-db.yaml down"
         Write-Host "OK: Services stopped" -ForegroundColor Green
+        return
+    }
+
+    if ($ActionName -eq 'status') {
+        Write-Host "INFO: Checking service status..." -ForegroundColor Cyan
+        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml ps && docker compose -f docker-compose.yaml ps"
         return
     }
 }

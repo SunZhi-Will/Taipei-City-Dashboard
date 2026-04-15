@@ -1,7 +1,7 @@
 ---
 name: data-theme-integration
 description: "Use when: 擴充新資料主題（如社會福利、教育、健康、環保、經濟）；端對端整合：資料收集→轉換→BE API→FE 組件；支援全棧開發，優先級與成本評估。適用於黑客松課題、政策資料新增。"
-applyTo: "**"
+applyTo: "Taipei-City-Dashboard-DE/**,Taipei-City-Dashboard-BE/**,Taipei-City-Dashboard-FE/**,user-added/2026-this-year/docs/**"
 ---
 
 # 資料主題擴充與全棧整合 Skill
@@ -263,7 +263,7 @@ type AED struct {
 
 ## 📚 參考檔案
 
-- **DE 黑客松例子**: [analysis/2026-04-14_hackathon_update_analysis.md](../analysis/2026-04-14_hackathon_update_analysis.md)
-- **BE Model 範例**: [Taipei-City-Dashboard-BE/app/models/](../Taipei-City-Dashboard-BE/app/models/)
-- **FE 組件範例**: [Taipei-City-Dashboard-FE/src/dashboardComponent/](../Taipei-City-Dashboard-FE/src/dashboardComponent/)
-- **DAG 範例**: [Taipei-City-Dashboard-DE/dags/proj_city_dashboard/](../Taipei-City-Dashboard-DE/dags/proj_city_dashboard/)
+- **DE 黑客松例子**: [2026-04-14_hackathon_update_analysis.md](../../../user-added/2026-this-year/docs/05-archives/2026-04-14_hackathon_update_analysis.md)
+- **BE Model 範例**: [Taipei-City-Dashboard-BE/app/models/](../../../Taipei-City-Dashboard-BE/app/models/)
+- **FE 組件範例**: [Taipei-City-Dashboard-FE/src/dashboardComponent/](../../../Taipei-City-Dashboard-FE/src/dashboardComponent/)
+- **DAG 範例**: [Taipei-City-Dashboard-DE/dags/proj_city_dashboard/](../../../Taipei-City-Dashboard-DE/dags/proj_city_dashboard/)

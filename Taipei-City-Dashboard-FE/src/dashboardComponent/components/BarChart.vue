@@ -35,6 +35,10 @@ const chartOptions = ref({
 	},
 	grid: {
 		show: false,
+		padding: {
+			left: 0,
+			right: 4,
+		},
 	},
 	legend: {
 		show: false,
@@ -45,7 +49,7 @@ const chartOptions = ref({
 			distributed: true,
 			horizontal: true,
 			dataLabels: {
-				hideOverflowingLabels: false
+				hideOverflowingLabels: false,
 			},
 		},
 	},
@@ -90,8 +94,13 @@ const chartOptions = ref({
 	},
 	yaxis: {
 		labels: {
+			align: "left",
+			minWidth: 0,
+			maxWidth: 56,
+			offsetX: -6,
 			formatter: function (value) {
-				return value.length > 7 ? value.slice(0, 6) + "..." : value;
+				const label = String(value).trim();
+				return label.length > 7 ? label.slice(0, 6) + "..." : label;
 			},
 		},
 	},

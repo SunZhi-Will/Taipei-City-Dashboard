@@ -28,6 +28,8 @@ services:
     environment:
       DOCKER_COMPOSE: "true"
       NODE_ENV: ${NODE_ENV}
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
       VITE_API_URL: ${VITE_API_URL}
       VITE_APP_TITLE: ${VITE_APP_TITLE}
       VITE_APP_VERSION: ${VITE_APP_VERSION}
@@ -61,6 +63,9 @@ services:
       GIN_MODE: ${GIN_MODE}
       GIN_DOMAIN: ${GIN_DOMAIN}
       GIN_PORT: ${GIN_PORT:-8080}
+      GOPATH: /tmp/go
+      GOMODCACHE: /tmp/go/pkg/mod
+      GOCACHE: /tmp/go-build-cache
       JWT_SECRET: ${JWT_SECRET}
       IDNO_SALT: ${IDNO_SALT}
       ISSO_CLIENT_ID: ${ISSO_CLIENT_ID}
@@ -94,7 +99,7 @@ services:
     working_dir: /opt/Taipei-City-Dashboard-BE
     ports:
       - "8088:${PORT:-8080}"
-    command: ["go", "run", "main.go"]
+    command: ["air", "-c", ".air.toml"]
 
   vector-db-upgrade:
     build:

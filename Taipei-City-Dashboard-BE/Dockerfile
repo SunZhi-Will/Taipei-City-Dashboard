@@ -112,6 +112,9 @@ RUN set -eux; \
 ENV LD_LIBRARY_PATH=/usr/lib
 ENV GOCACHE=/tmp/go-build-cache
 
+# Install Air for backend hot reload in local Docker development.
+RUN go install github.com/air-verse/air@v1.61.7
+
 COPY --from=model_export /out/onnx-e5 /opt/lm_model/onnx-e5
 
 WORKDIR /app
