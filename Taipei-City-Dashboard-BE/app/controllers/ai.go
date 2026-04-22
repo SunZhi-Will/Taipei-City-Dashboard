@@ -4,6 +4,7 @@ import (
 	"TaipeiCityDashboardBE/app/services/ai"
 	"TaipeiCityDashboardBE/app/util"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
@@ -112,7 +113,7 @@ func ChatWithTWCC(c *gin.Context) {
 	}
 
 	// 5. Standard Non-Streaming Response
-	logEntry, err := ai.ChatWithTWCC(c.Request.Context(), req, options...)
+	chatResult, err := ai.ChatWithTWCC(c.Request.Context(), req, options...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status": "error",
@@ -120,6 +121,24 @@ func ChatWithTWCC(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+
+	logEntry := chatResult.Log
+
+	usedTools := chatResult.UsedTools
+	if len(usedTools) == 0 && logEntry.Tools != "" {
+		_ = json.Unmarshal([]byte(logEntry.Tools), &usedTools)
+	}
+
+	answerMode := "agent_chat"
+	for _, toolName := range usedTools {
+		if toolName == "retrieve_components_by_query" {
+			answerMode = "agent_rag"
+			break
+		}
+	}
+	if chatResult.AgentResult != nil && chatResult.AgentResult.PrimaryComponent != nil {
+		answerMode = "agent_component_selection"
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -133,6 +152,9 @@ func ChatWithTWCC(c *gin.Context) {
 				"total_tokens":  logEntry.TotalTokens,
 			},
 			"tool_used":   logEntry.ToolUsed,
+			"tools":       usedTools,
+			"answer_mode": answerMode,
+			"agent_result": chatResult.AgentResult,
 			"latency_ms":  logEntry.LatencyMS,
 			"model":       logEntry.Model,
 			"provider":    logEntry.Provider,

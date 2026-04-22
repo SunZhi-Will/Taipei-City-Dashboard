@@ -64,23 +64,27 @@ onMounted(() => {
             <template v-if="authStore.token">
               <h1 @click="toggleCollapse(['favorites', 'personal'])">
                 私人儀表板
+                <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.favorites && collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
               </h1>
               <h2 @click="toggleCollapse('favorites')">
                 我的最愛
+                <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.favorites ? "arrow_drop_down" : "arrow_drop_up" }}</span>
               </h2>
               <transition name="collapse">
-                <template v-if="!collapsedStates.favorites">
+                <template v-if="!collapsedStates.favorites && contentStore.favorites?.index">
                   <SideBarTab
                     icon="favorite"
                     title="收藏組件"
                     :expanded="true"
                     :index="contentStore.favorites?.index"
+                    :level="3"
                     @click="dialogStore.hideAllDialogs"
                   />
                 </template>
               </transition>
 
               <h2 @click="toggleCollapse('personal')">
+                <span class="mobilenavigation-chevron">{{ collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
                 個人儀表板
               </h2>
               <div
@@ -104,6 +108,7 @@ onMounted(() => {
                     :title="item.name"
                     :index="item.index"
                     :expanded="true"
+                    :level="3"
                     @click="dialogStore.hideAllDialogs"
                   />
                 </div>
@@ -111,6 +116,7 @@ onMounted(() => {
             </template>
             <h1 @click="toggleCollapse(contentStore.cityManager.activeCities)">
               公共儀表板
+              <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ contentStore.cityManager.activeCities.every((city) => collapsedStates[city]) ? "arrow_drop_down" : "arrow_drop_up" }}</span>
             </h1>
             <template
               v-for="city in contentStore.cityManager.activeCities"
@@ -118,6 +124,7 @@ onMounted(() => {
             >
               <h2 @click="toggleCollapse(city)">
                 {{ `${contentStore.cityManager.getExpandedNameName(city)}` }}
+                <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ collapsedStates[city] ? "arrow_drop_down" : "arrow_drop_up" }}</span>
               </h2>
               <transition name="collapse">
                 <div
@@ -134,6 +141,7 @@ onMounted(() => {
                     :index="item.index"
                     :expanded="true"
                     :city="city"
+                    :level="3"
                     @click="dialogStore.hideAllDialogs"
                   />
                 </div>
@@ -192,8 +200,11 @@ onMounted(() => {
 
 	// same as the sidebar in the SideBar.vue
 	h1 {
+    display: flex;
+    align-items: center;
 		cursor: pointer;
 		margin: 12px 0;
+    min-height: 26px;
 
 		&:first-of-type {
 			margin-top: 0;
@@ -202,12 +213,35 @@ onMounted(() => {
 
 	// same as the sidebar in the SideBar.vue
 	h2 {
+    display: flex;
+    align-items: center;
 		color: var(--color-complement-text);
 		font-weight: 400;
 		text-wrap: nowrap;
 		cursor: pointer;
-		margin-left: 1em;
+    min-height: 26px;
+    margin: 2px 0 2px 1em;
 	}
+
+  &-chevron {
+    font-family: "Material Icons Round", var(--font-icon);
+    font-style: normal;
+    font-weight: 400;
+    font-size: 18px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "liga";
+    margin-right: 2px;
+    margin-left: auto;
+    margin-right: 0;
+    color: var(--color-complement-text);
+  }
 
 	&-sub-no {
 		margin: 0.5rem 0 0.5rem 18px;

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIChatHub Widget Clean Demo</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 32%),
+        radial-gradient(circle at right, rgba(16, 185, 129, 0.16), transparent 28%),
+        linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      color: #0f172a;
+    }
+
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 48px 20px 120px;
+    }
+
+    .hero {
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 24px;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
+      backdrop-filter: blur(12px);
+      padding: 28px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      line-height: 1.05;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.7;
+      color: #334155;
+      font-size: 1rem;
+    }
+
+    .tips {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .tip {
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      line-height: 1.6;
+    }
+
+    .tip strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.95rem;
+    }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      background: rgba(15, 23, 42, 0.06);
+      border-radius: 8px;
+      padding: 2px 6px;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>AIChatHub Widget Clean Demo</h1>
+      <p>
+        這份展示頁只依賴同資料夾內的 <code>./aichathub-widget-v2.js</code>，
+        並攔截 <code>/api/chat</code> 與 <code>/api/chat/suggested-tags</code> 做 mock，
+        方便跨機器、跨環境展示同一套外觀。
+      </p>
+      <div class="tips">
+        <div class="tip">
+          <strong>穩定示範</strong>
+          已固定主題色、聊天背景與開啟行為，降低環境差異。
+        </div>
+        <div class="tip">
+          <strong>支援圖表/地圖</strong>
+          內建 marked、Chart.js、Leaflet 的 CDN 載入。
+        </div>
+        <div class="tip">
+          <strong>建議測試詞</strong>
+          直接輸入「長條圖」、「折線圖」、「圓餅圖」、「地圖」、「綜合示例」。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+
+  <script>
+    window.ChartRenderer = {
+      renderInto: function (container, chartXml) {
+        const canvas = container.querySelector('canvas') || document.createElement('canvas');
+        if (!canvas.parentElement) {
+          canvas.style.width = '100%';
+          canvas.style.height = '100%';
+          container.appendChild(canvas);
+        }
+
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(chartXml, 'text/xml');
+        const type = xmlDoc.documentElement.getAttribute('type') || 'bar';
+        const title = xmlDoc.documentElement.getAttribute('title') || '';
+        const labels = [];
+        const datasets = [];
+        const palette = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2'];
+        const seriesElements = Array.from(xmlDoc.querySelectorAll('series'));
+
+        if (seriesElements.length > 0) {
+          Array.from(xmlDoc.querySelectorAll('labels > label')).forEach(function (labelNode) {
+            labels.push((labelNode.textContent || '').trim());
+          });
+
+          seriesElements.forEach(function (seriesElement, index) {
+            const values = Array.from(seriesElement.querySelectorAll('value')).map(function (valueNode) {
+              return parseFloat(valueNode.textContent || '0');
+            });
+
+            if (labels.length === 0) {
+              values.forEach(function (_, valueIndex) {
+                labels.push('Item ' + (valueIndex + 1));
+              });
+            }
+
+            datasets.push({
+              label: seriesElement.getAttribute('name') || 'Series ' + (index + 1),
+              data: values,
+              backgroundColor: type === 'line' ? 'rgba(37, 99, 235, 0.15)' : palette[index % palette.length],
+              borderColor: seriesElement.getAttribute('color') || palette[index % palette.length],
+              borderWidth: 2,
+              fill: type === 'line',
+              tension: type === 'line' ? 0.35 : 0
+            });
+          });
+        } else {
+          const values = [];
+          Array.from(xmlDoc.querySelectorAll('data')).forEach(function (dataNode, index) {
+            labels.push(dataNode.getAttribute('label') || 'Item ' + (index + 1));
+            values.push(parseFloat(dataNode.getAttribute('value') || '0'));
+          });
+
+          datasets.push({
+            label: title || 'Data',
+            data: values,
+            backgroundColor: type === 'line' ? 'rgba(37, 99, 235, 0.15)' : 'rgba(37, 99, 235, 0.82)',
+            borderColor: '#2563eb',
+            borderWidth: 2,
+            fill: type === 'line',
+            tension: type === 'line' ? 0.35 : 0
+          });
+        }
+
+        if (canvas._chartInstance) {
+          canvas._chartInstance.destroy();
+        }
+
+        canvas._chartInstance = new window.Chart(canvas, {
+          type: type,
+          data: {
+            labels: labels,
+            datasets: datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: !!title },
+              title: { display: !!title, text: title }
+            }
+          }
+        });
+      }
+    };
+
+    (function setupWidgetDemoMockApi() {
+      const originalFetch = window.fetch.bind(window);
+      const mockTags = [
+        '顯示長條圖',
+        '顯示折線圖',
+        '顯示圓餅圖',
+        '顯示地圖',
+        '綜合示例'
+      ];
+
+      function jsonResponse(data, status) {
+        return new Response(JSON.stringify(data), {
+          status: status || 200,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      function buildMockReply(userMessage) {
+        const text = String(userMessage || '').toLowerCase();
+
+        if (text.includes('長條') || text.includes('bar')) {
+          return {
+            message: [
+              '以下是 **長條圖** 假資料（Q1~Q4）。',
+              '<chart type="bar" title="季度營收比較 (百萬)">',
+              '<data label="Q1" value="120" />',
+              '<data label="Q2" value="180" />',
+              '<data label="Q3" value="150" />',
+              '<data label="Q4" value="220" />',
+              '</chart>'
+            ].join('\n')
+          };
+        }
+
+        if (text.includes('折線') || text.includes('line')) {
+          return {
+            message: [
+              '以下是 **折線圖** 假資料（近六個月活躍用戶）。',
+              '<chart type="line" title="MAU 趨勢">',
+              '<labels><label>1月</label><label>2月</label><label>3月</label><label>4月</label><label>5月</label><label>6月</label></labels>',
+              '<series name="活躍用戶" color="#16a34a">',
+              '<value>820</value><value>910</value><value>980</value><value>1100</value><value>1240</value><value>1380</value>',
+              '</series>',
+              '</chart>'
+            ].join('\n')
+          };
+        }
+
+        if (text.includes('圓餅') || text.includes('pie')) {
+          return {
+            message: [
+              '以下是 **圓餅圖** 假資料（流量來源）。',
+              '<chart type="pie" title="流量來源分佈">',
+              '<data label="自然搜尋" value="38" />',
+              '<data label="直接流量" value="26" />',
+              '<data label="社群" value="21" />',
+              '<data label="廣告" value="15" />',
+              '</chart>'
+            ].join('\n')
+          };
+        }
+
+        if (text.includes('地圖') || text.includes('map')) {
+          return {
+            message: [
+              '以下是 **地圖** 假資料（北中南服務據點）。',
+              '<map>',
+              '<location name="台北服務中心" englishName="Taipei Center" lat="25.0330" lng="121.5654" description="主要客服據點" />',
+              '<location name="台中服務中心" englishName="Taichung Center" lat="24.1477" lng="120.6736" description="中區技術支援" />',
+              '<location name="高雄服務中心" englishName="Kaohsiung Center" lat="22.6273" lng="120.3014" description="南區商務據點" />',
+              '</map>'
+            ].join('\n')
+          };
+        }
+
+        if (text.includes('綜合') || text.includes('all')) {
+          return {
+            message: [
+              '以下是 **綜合示例**：同時包含摘要、圖表與地圖。',
+              '',
+              '| 指標 | 數值 |',
+              '|---|---:|',
+              '| 今日詢問數 | 128 |',
+              '| 解決率 | 92% |',
+              '',
+              '<chart type="bar" title="今日各時段詢問量">',
+              '<data label="09:00" value="22" />',
+              '<data label="12:00" value="35" />',
+              '<data label="15:00" value="41" />',
+              '<data label="18:00" value="30" />',
+              '</chart>',
+              '',
+              '<map>',
+              '<location name="內湖機房" englishName="Neihu DC" lat="25.0822" lng="121.5753" description="核心服務節點" />',
+              '<location name="板橋備援點" englishName="Banqiao Backup" lat="25.0130" lng="121.4654" description="災難備援節點" />',
+              '</map>'
+            ].join('\n')
+          };
+        }
+
+        return {
+          message: [
+            '你可以點選下方建議 Tag 觀看不同效果。',
+            '',
+            '目前支援：長條圖、折線圖、圓餅圖、地圖、綜合示例。'
+          ].join('\n')
+        };
+      }
+
+      window.fetch = async function (input, init) {
+        const requestUrl = typeof input === 'string' ? input : input.url;
+        const url = new URL(requestUrl, window.location.href);
+        const method = (init && init.method ? init.method : 'GET').toUpperCase();
+
+        if (url.pathname.endsWith('/api/chat/suggested-tags') && method === 'POST') {
+          return jsonResponse({ tags: mockTags });
+        }
+
+        if (url.pathname.endsWith('/api/chat') && method === 'POST') {
+          let body = {};
+          try {
+            body = init && init.body ? JSON.parse(init.body) : {};
+          } catch (error) {
+            body = {};
+          }
+
+          const mock = buildMockReply(body.message || '');
+          return jsonResponse({
+            message: mock.message,
+            messageId: 'demo-msg-' + Date.now(),
+            conversationHistoryId: body.conversationHistoryId || 'demo-conv-001'
+          });
+        }
+
+        if (/\/api\/chat\/message\/[^/]+\/feedback$/.test(url.pathname) && method === 'POST') {
+          return jsonResponse({ message: 'feedback saved (mock)' });
+        }
+
+        return originalFetch(input, init);
+      };
+    })();
+
+    window.AIChatHubConfig = {
+      projectId: 'demo-project-001',
+      chatBotId: 'demo-chatbot-001',
+      baseUrl: 'https://demo.local',
+      assistantName: 'Demo Assistant',
+      welcomeMessage: '您好，這是 AIChatHub Widget 的乾淨展示頁。',
+      themeColor: '#0f172a',
+      chatBackgroundColor: '#f8fafc',
+      openByDefault: true,
+      mobileBreakpoint: 768,
+      enableMessageCopy: true,
+      enableMessageRating: true,
+      persistHistory: false
+    };
+  </script>
+
+  <script src="./aichathub-widget-v2.js"></script>
+</body>
+</html>

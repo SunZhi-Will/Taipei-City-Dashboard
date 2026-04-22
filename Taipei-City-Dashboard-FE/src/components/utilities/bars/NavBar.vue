@@ -9,12 +9,14 @@ import { useRoute } from "vue-router";
 import { useFullscreen } from "@vueuse/core";
 import { useAuthStore } from "../../../store/authStore";
 import { useDialogStore } from "../../../store/dialogStore";
+import { useContentStore } from "../../../store/contentStore";
 
 import UserSettings from "../../dialogs/UserSettings.vue";
 import ContributorsList from "../../dialogs/ContributorsList.vue";
 
 const route = useRoute();
 const authStore = useAuthStore();
+const contentStore = useContentStore();
 const dialogStore = useDialogStore();
 const { isFullscreen, toggle } = useFullscreen();
 
@@ -44,9 +46,16 @@ const isLocalhost = computed(() => {
             alt="tuic logo"
           >
         </div>
-        <div>
-          <h1>{{ VITE_APP_TITLE }}</h1>
-          <h2>Taipei City Dashboard</h2>
+        <div class="navbar-logo-titles">
+          <div class="navbar-logo-header">
+            <h1>{{ VITE_APP_TITLE }}</h1>
+            <h2>Taipei City Dashboard</h2>
+          </div>
+          <span class="navbar-theme-separator">/</span>
+          <span class="navbar-theme-name">
+            <span class="navbar-theme-icon">{{ contentStore.currentDashboard.icon }}</span>
+            {{ contentStore.currentDashboard.name }}
+          </span>
         </div>
       </div>
     </a>
@@ -182,9 +191,13 @@ const isLocalhost = computed(() => {
 	border-bottom: 1px solid var(--color-border);
 	background-color: var(--color-component-background);
 	user-select: none;
+	position: relative;
+	z-index: 30;
+	overflow: visible;
 
 	&-logo {
 		display: flex;
+		align-items: center;
 
 		h1 {
 			font-weight: 500;
@@ -213,10 +226,76 @@ const isLocalhost = computed(() => {
 				filter: invert(1);
 			}
 		}
+
+		&-theme-separator {
+			margin: 0 8px;
+			opacity: 0.5;
+			font-weight: 300;
+
+			@media screen and (max-width: 768px) {
+				display: none;
+			}
+		}
+
+		&-theme-name {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			font-size: var(--font-s);
+			font-weight: 500;
+			color: var(--color-highlight);
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			max-width: 200px;
+
+			@media screen and (max-width: 768px) {
+				display: none;
+			}
+
+			@media screen and (max-width: 500px) {
+				font-size: var(--font-xs);
+				max-width: 120px;
+			}
+		}
+
+		&-theme-icon {
+			font-family: var(--font-icon);
+			font-size: calc(var(--font-m) * var(--font-to-icon));
+			display: flex;
+			align-items: center;
+		}
+
+		&-titles {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+		}
+
+		&-header {
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0;
+
+			h1 {
+				margin: 0;
+				line-height: 1;
+			}
+
+			h2 {
+				margin: 0;
+				line-height: 1;
+			}
+		}
 	}
 
 	&-tabs {
 		display: flex;
+		position: absolute;
+		left: 50%;
+		transform: translateX(-50%);
+		pointer-events: auto;
 
 		a {
 			height: 59px;

@@ -93,6 +93,11 @@ const routes = [
 		component: () => import("../views/admin/AdminDisaster.vue"),
 	},
 	{
+		path: "/admin/ai-stats",
+		name: "admin-ai-stats",
+		component: () => import("../views/admin/AdminAiStats.vue"),
+	},
+	{
 		path: "/:pathMatch(.*)*",
 		name: "notFoundRedirect",
 		redirect: "/dashboard",

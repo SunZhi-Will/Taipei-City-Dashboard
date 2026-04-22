@@ -22,6 +22,19 @@ const route = useRoute();
 
 const isCurrentPageMapView = computed(() => route.name === "mapview");
 
+const hasContent = computed(() => {
+	// 是否有可見的功能
+	const hasSettings = 
+		contentStore.personalDashboards
+			.map((el) => el.index)
+			.includes(contentStore.currentDashboard.index) &&
+		contentStore.currentDashboard.icon !== 'favorite';
+	
+	const hasPin = authStore.user?.user_id && isCurrentPageMapView.value;
+	
+	return hasSettings || hasPin || authStore.isMobileDevice;
+});
+
 function handleOpenSettings() {
 	contentStore.editDashboard = JSON.parse(
 		JSON.stringify(contentStore.currentDashboard)
@@ -32,33 +45,29 @@ function handleOpenSettings() {
 </script>
 
 <template>
-  <div class="settingsbar">
-    <div class="settingsbar-title">
-      <span>{{ contentStore.currentDashboard.icon }}</span>
-      <h2>{{ contentStore.currentDashboard.name }}</h2>
-      <button
-        class="show-if-mobile"
-        @click="dialogStore.showDialog('mobileNavigation')"
-      >
-        <span class="settingsbar-title-navigation">arrow_drop_down_circle</span>
+  <div v-if="hasContent" class="settingsbar">
+    <button
+      class="show-if-mobile"
+      @click="dialogStore.showDialog('mobileNavigation')"
+    >
+      <span class="settingsbar-title-navigation">arrow_drop_down_circle</span>
+    </button>
+    <MobileNavigation />
+    <div
+      v-if="
+        contentStore.personalDashboards
+          .map((el) => el.index)
+          .includes(contentStore.currentDashboard.index) &&
+          contentStore.currentDashboard.icon !== 'favorite'
+      "
+      class="settingsbar-settings hide-if-mobile"
+    >
+      <button @click="handleOpenSettings">
+        <span>settings</span>
+        <p>設定</p>
       </button>
-      <MobileNavigation />
-      <div
-        v-if="
-          contentStore.personalDashboards
-            .map((el) => el.index)
-            .includes(contentStore.currentDashboard.index) &&
-            contentStore.currentDashboard.icon !== 'favorite'
-        "
-        class="settingsbar-settings hide-if-mobile"
-      >
-        <button @click="handleOpenSettings">
-          <span>settings</span>
-          <p>設定</p>
-        </button>
-      </div>
-      <AddEditDashboards />
     </div>
+    <AddEditDashboards />
     <button
       v-if="authStore.user?.user_id && isCurrentPageMapView"
       class="settingsbar-pin hide-if-mobile"
@@ -83,32 +92,26 @@ function handleOpenSettings() {
 	min-height: 1.6rem;
 	display: flex;
 	justify-content: space-between;
+	align-items: center;
 	margin: 20px var(--font-m) 0;
 	padding-bottom: 0.5rem;
 	border-bottom: solid 1px var(--color-border);
 	user-select: none;
+	gap: 4px;
 
-	&-title {
+	span {
+		font-family: var(--font-icon);
+		font-size: calc(var(--font-m) * var(--font-to-icon));
+	}
+
+	button {
 		display: flex;
 		align-items: center;
-		overflow: hidden;
+	}
 
-		span {
-			font-family: var(--font-icon);
-			font-size: calc(var(--font-m) * var(--font-to-icon));
-		}
-
-		h2 {
-			margin: 0 var(--font-s);
-			font-weight: 400;
-			font-size: var(--font-m);
-			white-space: nowrap;
-		}
-
-		&-navigation {
-			margin-left: 4px;
-			color: var(--color-complement-text);
-		}
+	&-title-navigation {
+		margin-left: 4px;
+		color: var(--color-complement-text);
 	}
 
 	&-settings {

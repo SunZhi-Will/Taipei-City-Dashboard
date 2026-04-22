@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
@@ -39,8 +41,30 @@ type AIChatRequest struct {
 	Params    map[string]interface{} `json:"params"`
 }
 
+type AgentComponentCandidate struct {
+	ID    int64   `json:"id"`
+	Index string  `json:"index"`
+	Name  string  `json:"name"`
+	City  string  `json:"city"`
+	Score float64 `json:"score"`
+}
+
+type AgentResult struct {
+	PrimaryComponent  *AgentComponentCandidate  `json:"primary_component,omitempty"`
+	RelatedComponents []AgentComponentCandidate `json:"related_components,omitempty"`
+	SelectionReason   string                    `json:"selection_reason"`
+	RetrievalType     string                    `json:"retrieval_type,omitempty"`
+}
+
+type AIChatResult struct {
+	Log        *models.AIChatLog    `json:"log"`
+	UsedTools  []string             `json:"used_tools"`
+	ToolResults map[string]string   `json:"tool_results,omitempty"`
+	AgentResult *AgentResult        `json:"agent_result,omitempty"`
+}
+
 // ChatWithTWCC handles the AI conversation logic including retries, tool calling loop, and logging.
-func ChatWithTWCC(ctx context.Context, req AIChatRequest, options ...llms.CallOption) (*models.AIChatLog, error) {
+func ChatWithTWCC(ctx context.Context, req AIChatRequest, options ...llms.CallOption) (*AIChatResult, error) {
 	if err := aiSemaphore.Acquire(ctx, 1); err != nil {
 		return nil, fmt.Errorf("server too busy: %v", err)
 	}
@@ -55,6 +79,7 @@ func newSession(req AIChatRequest, options ...llms.CallOption) *aiSession {
 		req:             req,
 		options:         options,
 		currentMessages: make([]llms.MessageContent, 0),
+		toolResults:     make(map[string]string),
 		startTime:       time.Now(),
 	}
 	for _, opt := range options {
@@ -73,12 +98,13 @@ type aiSession struct {
 	totalOutput     int
 	toolUsed        bool
 	executedTools   []string
+	toolResults     map[string]string
 	lastResp        *llms.ContentResponse
 	lastErr         error
 	startTime       time.Time
 }
 
-func (s *aiSession) run(ctx context.Context) (*models.AIChatLog, error) {
+func (s *aiSession) run(ctx context.Context) (*AIChatResult, error) {
 	maxLoops := 5
 	s.executedTools = make([]string, 0)
 	for i := 0; i < maxLoops; i++ {
@@ -162,6 +188,9 @@ func (s *aiSession) executeTools(ctx context.Context, toolCalls []llms.ToolCall)
 			result = fmt.Sprintf("Error: %v. Please verify arguments.", err)
 			logs.FError("Tool Error: %v", err)
 		}
+		
+		// Store tool result for potential extraction
+		s.toolResults[tc.FunctionCall.Name] = result
 
 		s.currentMessages = append(s.currentMessages, llms.MessageContent{
 			Role: llms.ChatMessageTypeTool,
@@ -201,7 +230,7 @@ func (s *aiSession) injectInstructions() {
 	}
 }
 
-func (s *aiSession) finalize() (*models.AIChatLog, error) {
+func (s *aiSession) finalize() (*AIChatResult, error) {
 	log := &models.AIChatLog{
 		SessionID: s.req.SessionID, UserID: s.req.UserID, IPAddress: s.req.IPAddress,
 		Provider: "twcc", Model: global.TWCC.Model, LatencyMS: int(time.Since(s.startTime).Milliseconds()),
@@ -215,7 +244,11 @@ func (s *aiSession) finalize() (*models.AIChatLog, error) {
 	if s.lastErr != nil {
 		log.Status, log.ErrorCode, log.ErrorMessage = "error", "MODEL_ERROR", s.lastErr.Error()
 		models.CreateAIChatLog(log)
-		return log, s.lastErr
+		return &AIChatResult{
+			Log:         log,
+			UsedTools:   append([]string{}, s.executedTools...),
+			ToolResults: copyToolResults(s.toolResults),
+		}, s.lastErr
 	}
 
 	if s.lastResp != nil && len(s.lastResp.Choices) > 0 {
@@ -233,7 +266,155 @@ func (s *aiSession) finalize() (*models.AIChatLog, error) {
 	if err := models.CreateAIChatLog(log); err != nil {
 		logs.FError("DB Log Error: %v", err)
 	}
-	return log, nil
+
+	agentResult := buildAgentResult(log.Question, s.toolResults["retrieve_components_by_query"])
+
+	return &AIChatResult{
+		Log:         log,
+		UsedTools:   append([]string{}, s.executedTools...),
+		ToolResults: copyToolResults(s.toolResults),
+		AgentResult: agentResult,
+	}, nil
+}
+
+func copyToolResults(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
+
+func buildAgentResult(userQuery, rawToolResult string) *AgentResult {
+	if strings.TrimSpace(rawToolResult) == "" {
+		return nil
+	}
+
+	var payload struct {
+		Type    string                   `json:"type"`
+		Results []map[string]interface{} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(rawToolResult), &payload); err != nil {
+		return nil
+	}
+	if len(payload.Results) == 0 {
+		return nil
+	}
+
+	candidates := make([]AgentComponentCandidate, 0, len(payload.Results))
+	for _, item := range payload.Results {
+		candidates = append(candidates, AgentComponentCandidate{
+			ID:    toInt64(item["id"]),
+			Index: toString(item["index"]),
+			Name:  toString(item["name"]),
+			City:  toString(item["city"]),
+			Score: toFloat64(item["score"]),
+		})
+	}
+
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	primary := candidates[0]
+	related := make([]AgentComponentCandidate, 0, 3)
+	for i := 1; i < len(candidates) && i <= 3; i++ {
+		related = append(related, candidates[i])
+	}
+
+	queryNorm := normalizeText(userQuery)
+	if queryNorm != "" {
+		for i := range candidates {
+			nameNorm := normalizeText(candidates[i].Name)
+			indexNorm := normalizeText(candidates[i].Index)
+			if strings.Contains(nameNorm, queryNorm) || strings.Contains(indexNorm, queryNorm) {
+				if i != 0 {
+					primary = candidates[i]
+					related = make([]AgentComponentCandidate, 0, 3)
+					for j := 0; j < len(candidates) && len(related) < 3; j++ {
+						if j == i {
+							continue
+						}
+						related = append(related, candidates[j])
+					}
+				}
+				break
+			}
+		}
+	}
+
+	reason := fmt.Sprintf("優先採用語意檢索結果，主結果為 %s（score=%.4f），並保留相關候選供比對。", primary.Name, primary.Score)
+	if queryNorm != "" {
+		reason = fmt.Sprintf("先比對使用者關鍵詞與組件名稱/索引，再依檢索分數排序；主結果為 %s（score=%.4f）。", primary.Name, primary.Score)
+	}
+
+	return &AgentResult{
+		PrimaryComponent:  &primary,
+		RelatedComponents: related,
+		SelectionReason:   reason,
+		RetrievalType:     payload.Type,
+	}
+}
+
+func normalizeText(text string) string {
+	replacer := strings.NewReplacer(
+		" ", "", "\n", "", "\t", "", ",", "", "，", "", ".", "", "。", "",
+		"!", "", "！", "", "?", "", "？", "", "-", "", "_", "", "/", "",
+		"(", "", ")", "", "（", "", "）", "", "[", "", "]", "", "【", "", "】", "",
+	)
+	return strings.ToLower(replacer.Replace(strings.TrimSpace(text)))
+}
+
+func toInt64(v interface{}) int64 {
+	s := toString(v)
+	if s == "" {
+		return 0
+	}
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err == nil {
+		return i
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err == nil {
+		return int64(f)
+	}
+	return 0
+}
+
+func toFloat64(v interface{}) float64 {
+	s := toString(v)
+	if s == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err == nil {
+		return f
+	}
+	return 0
+}
+
+func toString(v interface{}) string {
+	switch value := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return value
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(value), 'f', -1, 32)
+	case int:
+		return strconv.Itoa(value)
+	case int64:
+		return strconv.FormatInt(value, 10)
+	case int32:
+		return strconv.FormatInt(int64(value), 10)
+	default:
+		return fmt.Sprintf("%v", value)
+	}
 }
 
 func toolsToParts(calls []llms.ToolCall) []llms.ContentPart {

@@ -69,7 +69,10 @@ ENV ISSO_CLIENT_ID=$ISSO_CLIENT_ID \
     ISSO_CLIENT_SECRET=$ISSO_CLIENT_SECRET \
     JWT_SECRET=$JWT_SECRET \
     G1G2_CERT=$G1G2_CERT \
-	GOCACHE=/tmp/go-build-cache
+    HOME=/home/appuser \
+    GOPATH=/home/appuser/go \
+    GOMODCACHE=/home/appuser/go/pkg/mod \
+	GOCACHE=/home/appuser/.cache/go-build
 
 WORKDIR /app
 COPY --from=builder /go/src/app/TaipeiCityDashboardBE /app/
@@ -78,7 +81,9 @@ COPY --from=model_export /out/onnx-e5 /opt/lm_model/onnx-e5
 
 EXPOSE 8080
 
-RUN useradd -r -u 10001 appuser
+RUN useradd -m -r -u 10001 appuser && \
+    mkdir -p /home/appuser/.cache/go-build /home/appuser/go/pkg/mod && \
+    chown -R 10001:10001 /home/appuser
 USER 10001
 
 CMD ["/app/TaipeiCityDashboardBE"]
@@ -110,16 +115,21 @@ RUN set -eux; \
     rm -rf /tmp/ort.tgz "$ORTDIR"
 
 ENV LD_LIBRARY_PATH=/usr/lib
-ENV GOCACHE=/tmp/go-build-cache
+ENV HOME=/home/appuser
+ENV GOPATH=/home/appuser/go
+ENV GOMODCACHE=/home/appuser/go/pkg/mod
+ENV GOCACHE=/home/appuser/.cache/go-build
 
 # Install Air for backend hot reload in local Docker development.
-RUN go install github.com/air-verse/air@v1.61.7
+RUN GOBIN=/usr/local/bin go install github.com/air-verse/air@v1.61.7
 
 COPY --from=model_export /out/onnx-e5 /opt/lm_model/onnx-e5
 
 WORKDIR /app
 EXPOSE 8080
 
-RUN useradd -r -u 10001 appuser
+RUN useradd -m -r -u 10001 appuser && \
+    mkdir -p /home/appuser/.cache/go-build /home/appuser/go/pkg/mod && \
+    chown -R 10001:10001 /home/appuser
 USER 10001
 CMD ["go", "run", "main.go"]

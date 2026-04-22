@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"path/filepath"
@@ -92,14 +91,14 @@ func queryQdrant(queryVector []float32, limit int, scoreThreshold float64) (Qdra
 	return result, nil
 }
 
-func InitLmSession() *ort.DynamicSession[int64, float32] {
+func InitLmSession() (*ort.DynamicSession[int64, float32], error) {
 	LMConfig := global.LM
 
 	// 1) ONNX Runtime 初始化
 	ort.SetSharedLibraryPath("/usr/lib/libonnxruntime.so") // 設定共享函式庫路徑
 
 	if err := ort.InitializeEnvironment(); err != nil {
-		log.Fatalf("InitializeEnvironment error: %v", err)
+		return nil, fmt.Errorf("initialize onnx runtime environment error: %w", err)
 	}
 
 	// 2) 模型路徑
@@ -127,21 +126,20 @@ func InitLmSession() *ort.DynamicSession[int64, float32] {
 
 	session, err := ort.NewDynamicSession[int64, float32](modelPath, inputNames, outputNames)
 	if err != nil {
-		log.Fatalf("NewDynamicSession error: %v", err)
+		return nil, fmt.Errorf("create onnx dynamic session error: %w", err)
 	}
 
-	return session
+	return session, nil
 }
 
-func InitTokenizer() *tokenizer.Tokenizer {
+func InitTokenizer() (*tokenizer.Tokenizer, error) {
     modelDir := global.LM.ModelPath
     tokenizerPath := filepath.Join(modelDir, "tokenizer.json")
 	tk, err := pretrained.FromFile(tokenizerPath)
     if err != nil {
-        // 啟動時失敗就報警並停止，這比執行中當機好找原因
-        log.Fatalf("Critical: Failed to load tokenizer: %v", err)
+		return nil, fmt.Errorf("failed to load tokenizer: %w", err)
     }
-    return tk
+	return tk, nil
 }
 
 func GenVector(inputText string) ([]float32, error) {
@@ -156,14 +154,14 @@ func GenVector(inputText string) ([]float32, error) {
 
 	enc, err := tk.EncodeSingle(text) // 預設 addSpecialTokens = true
 	if err != nil {
-		log.Fatalf("tokenize error: %v", err)
+		return nil, fmt.Errorf("tokenize error: %w", err)
 	}
 
 	ids := enc.GetIds()                // []int
 	attnMask := enc.GetAttentionMask() // []int，1=有效 token, 0=padding
 
 	if len(ids) != len(attnMask) {
-		log.Fatalf("ids len %d != attention_mask len %d", len(ids), len(attnMask))
+		return nil, fmt.Errorf("ids len %d != attention_mask len %d", len(ids), len(attnMask))
 	}
 
 	seqLen := int64(len(ids))
@@ -173,7 +171,7 @@ func GenVector(inputText string) ([]float32, error) {
 	idsShape := ort.NewShape(batchSize, seqLen)
 	idsTensor, err := ort.NewEmptyTensor[int64](idsShape)
 	if err != nil {
-		log.Fatalf("NewEmptyTensor ids error: %v", err)
+		return nil, fmt.Errorf("new input_ids tensor error: %w", err)
 	}
 	defer idsTensor.Destroy()
 
@@ -186,7 +184,7 @@ func GenVector(inputText string) ([]float32, error) {
 	maskShape := ort.NewShape(batchSize, seqLen)
 	maskTensor, err := ort.NewEmptyTensor[int64](maskShape)
 	if err != nil {
-		log.Fatalf("NewEmptyTensor mask error: %v", err)
+		return nil, fmt.Errorf("new attention_mask tensor error: %w", err)
 	}
 	defer maskTensor.Destroy()
 
@@ -202,17 +200,20 @@ func GenVector(inputText string) ([]float32, error) {
 	outShape := ort.NewShape(batchSize, seqLen, hiddenSize)
 	outTensor, err := ort.NewEmptyTensor[float32](outShape)
 	if err != nil {
-		log.Fatalf("NewEmptyTensor output error: %v", err)
+		return nil, fmt.Errorf("new output tensor error: %w", err)
 	}
 	defer outTensor.Destroy()
 
 	outputTensors := []*ort.Tensor[float32]{outTensor}
 
 	session := global.LMSession
+	if session == nil {
+		return nil, fmt.Errorf("onnx session is not initialized")
+	}
 
 	// 6) 跑一次推論
 	if err := session.Run(inputTensors, outputTensors); err != nil {
-		log.Fatalf("session.Run error: %v", err)
+		return nil, fmt.Errorf("onnx session run error: %w", err)
 	}
 
 	// 7) 拿出 last_hidden_state 做 mean pooling + L2 normalize

@@ -2,7 +2,6 @@
 import { computed, ref } from "vue";
 // import "./styles/chartStyles.css";
 // import "./styles/toggleswitch.css";
-import "material-icons/iconfont/material-icons.css";
 import { getComponentDataTimeframe } from "./utilities/dataTimeframe";
 import { timeTerms } from "./utilities/AllTimes";
 import { chartTypes } from "./utilities/chartTypes";
@@ -56,7 +55,7 @@ const props = defineProps({
 		type: String,
 		default: "default",
 		validator: (value) =>
-			["default", "large", "map", "half", "halfmap", "preview"].includes(
+			["default", "large", "map", "half", "halfmap", "preview", "focus"].includes(
 				value
 			),
 	},
@@ -73,8 +72,11 @@ const props = defineProps({
 	infoBtnText: { type: String, default: "組件資訊" },
 	toggleDisable: { type: Boolean, default: false },
 	footer: { type: Boolean, default: true },
+	showIndex: { type: Boolean, default: true },
 	activeCity: { type: String, default: '' },
 	toggleOn: { type: Boolean, default: false },
+	fullscreenBtn: { type: Boolean, default: true },
+	expandedInContent: { type: Boolean, default: false },
 });
 
 const emits = defineEmits([
@@ -88,7 +90,8 @@ const emits = defineEmits([
 	"clearByParamFilter",
 	"clearByLayerFilter",
 	"fly",
-	"changeCity"
+	"changeCity",
+	"expandLayout"
 ]);
 
 const activeChart = ref(props.config.chart_config.types[0]);
@@ -179,6 +182,11 @@ function updateMouseLocation(e) {
 	mousePosition.value.y = e.pageY;
 }
 // Updates whether to show the tag tooltip
+
+function toggleContentLayout() {
+	emits("expandLayout", props.config.id);
+}
+
 function changeShowTagTooltipState(state) {
 	showTagTooltip.value = state;
 }
@@ -230,19 +238,23 @@ function returnChartComponent(name, svg) {
 
 <template>
   <div
-    :class="[
-      {
-        dashboardcomponent: true,
-        mapclosed: mode.includes('map') && !toggleOn,
-        mapopen: mode === 'map' && toggleOn,
-        halfmapopen: mode === 'halfmap' && toggleOn,
-        half: mode === 'half',
-        large: mode === 'large',
-        preview: mode === 'preview',
-      },
-    ]"
-    :style="style"
+    class="dashboardcomponent-fullscreen-container"
   >
+    <div
+      :class="[
+        {
+          dashboardcomponent: true,
+          mapclosed: mode.includes('map') && !toggleOn,
+          mapopen: mode === 'map' && toggleOn,
+          halfmapopen: mode === 'halfmap' && toggleOn,
+          half: mode === 'half',
+          large: mode === 'large',
+          preview: mode === 'preview',
+					focus: mode === 'focus',
+        },
+      ]"
+      :style="style"
+    >
     <!-- Header -->
     <div class="dashboardcomponent-header">
       <!-- Upper Left Corner -->
@@ -295,7 +307,7 @@ function returnChartComponent(name, svg) {
       </div>
       <!-- Upper Right Corner -->
       <div
-        v-if="['default', 'half', 'preview'].includes(mode)"
+				v-if="['default', 'half', 'preview', 'focus'].includes(mode)"
         class="dashboardcomponent-header-button"
       >
         <button
@@ -313,6 +325,14 @@ function returnChartComponent(name, svg) {
         >
           <span>favorite</span>
         </button>
+				<button
+					v-if="fullscreenBtn"
+					class="fullscreen-btn"
+					@click="toggleContentLayout"
+					:title="expandedInContent ? '返回網格' : '展開內容區'"
+				>
+					<span>{{ expandedInContent ? 'close_fullscreen' : 'open_in_full' }}</span>
+				</button>
         <button
           v-if="deleteBtn"
           class="isDelete"
@@ -325,6 +345,14 @@ function returnChartComponent(name, svg) {
         v-else-if="mode.includes('map')"
         class="dashboardcomponent-header-toggle"
       >
+				<button
+					v-if="fullscreenBtn"
+					class="fullscreen-btn"
+					@click="toggleContentLayout"
+					:title="expandedInContent ? '返回網格' : '展開內容區'"
+				>
+					<span>{{ expandedInContent ? 'close_fullscreen' : 'open_in_full' }}</span>
+				</button>
         <label class="toggleswitch">
           <input
             v-model="toggleOn"
@@ -339,7 +367,7 @@ function returnChartComponent(name, svg) {
     <div
       v-if="
         (!mode.includes('map') || toggleOn) &&
-          mode !== 'preview'
+					mode !== 'preview'
       "
       class="dashboardcomponent-control"
     >
@@ -397,7 +425,7 @@ function returnChartComponent(name, svg) {
             :class="`city-tag-item ${city.value}`"
           />
         </div>
-        <p :title="props.config.index">
+		<p v-if="props.showIndex" :title="props.config.index">
           Index: {{ props.config.index }}
         </p>
       </div>
@@ -471,7 +499,7 @@ function returnChartComponent(name, svg) {
     </div>
     <!-- Footer -->
     <div
-      v-if="footer && (!mode.includes('map') || toggleOn)"
+			v-if="footer && (!mode.includes('map') || toggleOn) && !expandedInContent"
       class="dashboardcomponent-footer"
     >
       <div
@@ -513,6 +541,7 @@ function returnChartComponent(name, svg) {
       class="dashboardcomponent-footer"
     />
   </div>
+	</div>
   <Teleport to="body">
     <!-- The class "chart-tooltip" could be edited in /assets/styles/chartStyles.css -->
     <TagTooltip
@@ -528,6 +557,10 @@ function returnChartComponent(name, svg) {
 </template>
 
 <style scoped lang="scss">
+.dashboardcomponent-fullscreen-container {
+	width: 100%;
+}
+
 * {
 	margin: 0;
 	padding: 0;
@@ -591,6 +624,21 @@ button:hover {
 				flex-shrink: 0;
 				margin-top: 4px;
 			}
+
+		.dashboardcomponent-new-badge {
+			display: inline-block;
+			margin-left: 8px;
+			padding: 2px 6px;
+			border-radius: 4px;
+			background-color: var(--color-highlight);
+			color: #fff;
+			font-size: calc(var(--font-s) * 0.85);
+			font-weight: 600;
+			letter-spacing: 0.03em;
+			line-height: 1.4;
+			font-family: inherit;
+			user-select: none;
+		}
 		}
 
 		h4 {
@@ -639,6 +687,7 @@ button:hover {
 			display: flex;
 			justify-content: flex-end;
 			align-items: flex-start;
+			gap: 4px;
 
 			button span {
 				color: var(--color-complement-text);
@@ -661,12 +710,34 @@ button:hover {
 					color: rgb(160, 112, 106);
 				}
 			}
+
+			button.fullscreen-btn span {
+				color: white;
+
+				&:hover {
+					color: var(--color-highlight);
+				}
+			}
 		}
 
 		&-toggle {
+			display: flex;
+			align-items: center;
+			gap: 4px;
 			min-height: var(--font-ms);
 			min-width: 2rem;
 			margin-top: 4px;
+
+			button span {
+				color: var(--color-complement-text);
+				font-family: var(--font-icon);
+				font-size: calc(var(--font-l) * var(--font-to-icon));
+				transition: color 0.2s;
+
+				&:hover {
+					color: white;
+				}
+			}
 		}
 
 		@media (max-width: 760px) {
@@ -945,6 +1016,20 @@ button:hover {
 				);
 			}
 		}
+	}
+}
+
+.focus {
+	height: calc(100vh - 160px);
+	height: calc(var(--vh) * 100 - 160px);
+	max-height: calc(100vh - 160px);
+	max-height: calc(var(--vh) * 100 - 160px);
+
+	&-chart,
+	&-loading,
+	&-error {
+		height: calc(100% - 3rem);
+		padding-top: 0;
 	}
 }
 

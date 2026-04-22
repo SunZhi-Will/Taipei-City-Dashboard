@@ -31,13 +31,11 @@ import NotificationBar from "./components/dialogs/NotificationBar.vue";
 import InitialWarning from "./components/dialogs/InitialWarning.vue";
 import ComponentSideBar from "./components/utilities/bars/ComponentSideBar.vue";
 import LogIn from "./components/dialogs/LogIn.vue";
-import ChatBox from "./components/dialogs/ChatBox.vue";
-import ChatBotIcon from "./components/icons/ChatBotIcon.vue";
+import ChatWidgetMount from "./components/chat/ChatWidgetMount.vue";
 
 const authStore = useAuthStore();
 const dialogStore = useDialogStore();
 const contentStore = useContentStore();
-const timeToUpdate = ref(600);
 
 const mapStore = useMapStore();
 const route = useRoute();
@@ -47,9 +45,6 @@ const boardIndex = ref(null);
 const board = ref(null);
 const frequency = ref(600);
 const isMappedToUpdateBoards = ref(false);
-// Chatroom
-const isChatBtnShow = ref(true);
-const isChatBoxShow = ref(false);
 // Timers
 let chartTimer = null;
 let crowdingTimer = null;
@@ -69,15 +64,19 @@ const updateBoardsMap = computed(() => {
 });
 
 const formattedTimeToUpdate = computed(() => {
-	const minutes = Math.floor(timeToUpdate.value / 60);
-	const seconds = timeToUpdate.value % 60;
+	const minutes = Math.floor(contentStore.timeToUpdate / 60);
+	const seconds = contentStore.timeToUpdate % 60;
 	return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+});
+
+const shouldShowChatWidget = computed(() => {
+	return ["dashboard", "mapview"].includes(authStore.currentPath);
 });
 
 function reloadChartData() {
 	if (!["dashboard", "mapview"].includes(authStore.currentPath)) return;
 	contentStore.updateCurrentDashboardAllChartData();
-	timeToUpdate.value = frequency.value;
+	contentStore.timeToUpdate = frequency.value;
 
 	if (isMappedToUpdateBoards.value) {
 		reloadMapData();
@@ -99,12 +98,12 @@ async function reloadCrowdingChartData() {
 
 function updateTimeToUpdate() {
 	if (!["dashboard", "mapview"].includes(authStore.currentPath)) return;
-	if (timeToUpdate.value <= 0) {
-		timeToUpdate.value = 0;
+	if (contentStore.timeToUpdate <= 0) {
+		contentStore.timeToUpdate = 0;
 		reloadChartData();
 		return;
 	}
-	timeToUpdate.value -= 5;
+	contentStore.timeToUpdate -= 5;
 }
 
 function reloadMapData() {
@@ -159,16 +158,6 @@ function reload3DMRTMapData() {
 	});
 }
 
-// Chatroom 功能顯示隱藏
-function chatbotBtnHandler() {
-	isChatBoxShow.value = !isChatBoxShow.value;
-}
-
-function hideBtnClickHandler() {
-	isChatBtnShow.value = false;
-	isChatBoxShow.value = false;
-}
-
 (watch(
 	() => route.query,
 	(query) => {
@@ -180,7 +169,7 @@ function hideBtnClickHandler() {
 		isMappedToUpdateBoards.value = updateBoardsMap.value.some((board) => {
 			return board.id === query.index;
 		});
-		timeToUpdate.value = frequency.value;
+		contentStore.timeToUpdate = frequency.value;
 	},
 ),
 { immediate: true });
@@ -233,7 +222,9 @@ onBeforeUnmount(() => {
       <SideBar />
       <div class="app-content-main">
         <SettingsBar />
-        <RouterView />
+				<div class="app-content-body">
+					<RouterView />
+				</div>
       </div>
     </div>
     <!-- /admin layouts -->
@@ -243,7 +234,9 @@ onBeforeUnmount(() => {
     >
       <AdminSideBar />
       <div class="app-content-main">
-        <RouterView />
+				<div class="app-content-body">
+					<RouterView />
+				</div>
       </div>
     </div>
     <!-- /component, /component/:index layouts -->
@@ -253,7 +246,9 @@ onBeforeUnmount(() => {
     >
       <ComponentSideBar />
       <div class="app-content-main">
-        <RouterView />
+				<div class="app-content-body">
+					<RouterView />
+				</div>
       </div>
     </div>
     <div v-else>
@@ -261,36 +256,7 @@ onBeforeUnmount(() => {
     </div>
     <InitialWarning />
     <LogIn />
-    <div
-      v-if="
-        ['dashboard', 'mapview'].includes(authStore.currentPath) &&
-          !authStore.isMobile &&
-          !authStore.isNarrowDevice
-      "
-      class="app-update"
-    >
-      <p>下次更新：{{ formattedTimeToUpdate }}</p>
-    </div>
-    <div class="chatbot-container">
-      <ChatBox
-        v-if="isChatBoxShow"
-        class="chatbox"
-      />
-      <div
-        v-if="isChatBtnShow"
-        class="chatbot-btn-area"
-      >
-        <div class="hide-chat-btn">
-          <button @click="hideBtnClickHandler" />
-        </div>
-        <button
-          class="chatbot-btn"
-          @click="chatbotBtnHandler"
-        >
-          <ChatBotIcon />
-        </button>
-      </div>
-    </div>
+		<ChatWidgetMount v-if="shouldShowChatWidget" />
   </div>
 </template>
 
@@ -313,6 +279,30 @@ onBeforeUnmount(() => {
 			width: 100%;
 			display: flex;
 			flex-direction: column;
+			height: 100%;
+			min-height: 0;
+			padding-top: 0;
+			padding-bottom: 0;
+			box-sizing: border-box;
+
+			> * {
+				margin-top: 0;
+				margin-bottom: 0;
+			}
+		}
+
+		&-body {
+			flex: 1;
+			min-height: 0;
+			height: 100%;
+			padding-bottom: var(--font-m);
+			margin-bottom: 0;
+			overflow-y: auto;
+
+			> * {
+				margin-bottom: 0;
+				padding-bottom: 0;
+			}
 		}
 	}
 
@@ -332,62 +322,6 @@ onBeforeUnmount(() => {
 		&:hover {
 			opacity: 1;
 		}
-	}
-}
-
-// Chatroom 樣式
-.chatbot-container {
-	position: fixed;
-	bottom: 1.5rem; // Tailwind bottom-6 → 24px
-	right: 1.5rem;
-	display: flex;
-	align-items: flex-end;
-	gap: 1rem; // Tailwind gap-4 → 16px
-	z-index: 10;
-
-	.chatbox {
-		width: 400px;
-		height: 500px;
-		margin-bottom: 35px;
-	}
-
-	.chatbot-btn-area {
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		.hide-chat-btn {
-			margin-left: auto;
-			button {
-				font-size: 16px;
-			}
-		}
-		.hide-chat-btn button::before {
-			content: "–";
-			font-weight: bold; /* 變粗 */
-			font-size: 20px; /* 可以順便調整大小 */
-		}
-		.chatbot-btn {
-			width: 70px;
-			height: 70px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border-radius: 50%;
-			background-color: #3b82f6; // Tailwind bg-blue-500
-			filter: brightness(1.5);
-			transition: filter 0.2s;
-
-			&:hover {
-				filter: brightness(1);
-			}
-		}
-	}
-}
-
-// 手機板隱藏小幫手
-@media (max-width: 600px) {
-	.chatbot-container {
-		display: none;
 	}
 }
 </style>

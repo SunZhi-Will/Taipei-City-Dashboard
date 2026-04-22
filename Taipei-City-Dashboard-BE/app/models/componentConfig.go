@@ -551,3 +551,34 @@ func DeleteComponent(id int, index string, mapConfigIDs pq.Int64Array) (deleteCh
 
 	return true, true, nil
 }
+
+/* ----- Vue Component Models ----- */
+
+// VueComponentResult represents a Vue component search result from Qdrant
+type VueComponentResult struct {
+	ID                string                 `json:"id"`
+	Name              string                 `json:"name"`
+	Path              string                 `json:"path"`
+	Category          string                 `json:"category"`
+	Description       string                 `json:"description"`
+	Purpose           []string               `json:"purpose"`
+	Props             map[string]string      `json:"props"`
+	Tags              []string               `json:"tags"`
+	Dependencies      []string               `json:"dependencies"`
+	UsageExample      string                 `json:"usage_example"`
+	RelatedComponents []string               `json:"related_components"`
+	Score             float64                `json:"score"`
+}
+
+// GetVueComponentByQuery searches for Vue components using vector similarity
+func GetVueComponentByQuery(queryString string, limit int, scoreThreshold float64) (results []VueComponentResult, err error) {
+	// This function will be called by the AI service to search for Vue components
+	// It communicates with the component search API endpoint which uses Qdrant
+	
+	// For now, return empty results - this will be populated by the component indexer service
+	// In production, this should call the component search service via HTTP
+	
+	// Placeholder implementation
+	results = make([]VueComponentResult, 0)
+	return results, nil
+}

@@ -46,6 +46,10 @@ const parseMapLayers = computed(() => {
 	return { hasMap: hasMap, noMap: noMap };
 });
 
+const isAedDashboard = computed(() => {
+  return contentStore.currentDashboard.index?.includes("aed");
+});
+
 watch(
 	() => route.query.index,
 	(newIndex, oldIndex) => {
@@ -139,7 +143,12 @@ function popularBasicLayerGA(map_config) {
 </script>
 
 <template>
-  <div class="map">
+  <div
+    :class="{
+      map: true,
+      'map-overlay-panel': isAedDashboard,
+    }"
+  >
     <div class="hide-if-mobile">
       <!-- 1. If the dashboard is map-layers -->
       <div
@@ -584,6 +593,7 @@ function popularBasicLayerGA(map_config) {
 	height: calc(var(--vh) * 100 - 127px);
 	display: flex;
 	margin: var(--font-m) var(--font-m);
+  position: relative;
 
 	&-charts {
 		width: 360px;
@@ -641,6 +651,19 @@ function popularBasicLayerGA(map_config) {
 			}
 		}
 	}
+}
+
+.map-overlay-panel {
+  .map-charts,
+  .map-charts-nodashboard {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    max-height: 100%;
+    padding-right: 4px;
+    margin-right: 0;
+  }
 }
 
 @keyframes spin {

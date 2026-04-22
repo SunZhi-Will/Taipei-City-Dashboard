@@ -5,17 +5,15 @@
       "name": "F5: Docker Quick Deploy",
       "type": "node-terminal",
       "request": "launch",
-      "cwd": "${workspaceFolder}/docker",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& '${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1' -Action status\"",
-      "preLaunchTask": "docker:quick-up"
+      "cwd": "${workspaceFolder}",
+      "command": "bash .vscode/scripts/docker-task.sh quick-up --follow --stop-on-interrupt"
     },
     {
       "name": "F5: Docker Full Bootstrap",
       "type": "node-terminal",
       "request": "launch",
-      "cwd": "${workspaceFolder}/docker",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& '${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1' -Action status\"",
-      "preLaunchTask": "docker:bootstrap-full"
+      "cwd": "${workspaceFolder}",
+      "command": "bash .vscode/scripts/docker-task.sh bootstrap-full --follow --stop-on-interrupt"
     }
   ]
 }
