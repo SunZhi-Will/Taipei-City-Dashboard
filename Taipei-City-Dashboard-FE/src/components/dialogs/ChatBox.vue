@@ -416,8 +416,6 @@ watch(
 			</div>
     </div>
 
-    <!-- 輸入區 -->
-    <div class="input-area">
 			<!-- 建議 Tags -->
 			<div
 				v-if="!isResponding && suggestedTags.length > 0"
@@ -486,7 +484,6 @@ watch(
 					<SendIcon />
 				</button>
 			</div>
-		</div>
 	</div>
 </template>
 
@@ -550,6 +547,7 @@ $btn-size-sm: 36px;
 	height: 100%;
 	border-radius: 16px;
 	overflow: hidden;
+	position: relative;
 	background: $bg-dark;
 	border: 1px solid $border-color;
 	display: flex;
@@ -643,7 +641,7 @@ $btn-size-sm: 36px;
 	.chat-area {
 		flex: 1;
 		min-height: 0;
-		padding: 0 0 0.5rem;
+		padding: 0 0 8.75rem;
 		overflow-y: auto;
 		overflow-x: hidden;
 		background: $bg-dark;
@@ -982,93 +980,96 @@ $btn-size-sm: 36px;
 		}
 	}
 
-	.input-area {
-		padding: 0.5rem 0.75rem 0.75rem;
-		background: $bg-dark;
-		border-top: 1px solid $border-color;
+	.tags-area {
+		position: absolute;
+		left: 0.75rem;
+		right: 0.75rem;
+		bottom: 4.25rem;
+		width: auto;
+		animation: fadeIn 0.25s ease-out;
+		z-index: 25;
+		background: transparent;
 
-		.tags-area {
-			position: relative;
-			width: 100%;
-			margin-bottom: 0.5rem;
-			animation: fadeIn 0.25s ease-out;
-
-			.tags-scroll {
-				display: flex;
-				gap: 0.5rem;
-				overflow-x: auto;
-				overflow-y: hidden;
-				padding: 0.25rem 1.75rem;
-				scroll-behavior: smooth;
-			}
-
-			.tag-chip {
-				flex-shrink: 0;
-				padding: 0.375rem 0.75rem;
-				border-radius: 1rem;
-				border: 2px solid rgba($white, 0.28);
-				background: rgba($white, 0.06);
-				color: $text-secondary;
-				font-size: 0.8125rem;
-				font-family: inherit;
-				white-space: nowrap;
-				cursor: pointer;
-				transition: $transition-fast;
-
-				&:hover {
-					background: rgba($white, 0.11);
-					border-color: rgba($white, 0.35);
-					color: $text-primary;
-				}
-
-				&:active {
-					transform: scale(0.98);
-				}
-			}
-
-			.tag-scroll-btn {
-				position: absolute;
-				top: 50%;
-				transform: translateY(-50%);
-				width: 28px;
-				height: 28px;
-				background: #2a2f36;
-				border: 1px solid #4a515a;
-				border-radius: 50%;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				cursor: pointer;
-				transition: $transition-fast;
-				z-index: 10;
-				color: #ffffff;
-				box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-
-				&:hover {
-					background: #363d47;
-					border-color: #5b6572;
-					transform: translateY(-50%) scale(1.05);
-				}
-			}
-
-			.tag-scroll-left { left: 0; }
-			.tag-scroll-right { right: 0; }
-		}
-
-		.input-shell {
-			position: relative;
+		.tags-scroll {
 			display: flex;
-			align-items: flex-end;
-			width: 100%;
-			min-height: 52px;
-			box-sizing: border-box;
-			background: transparent;
-			padding: 0;
-			border: none;
-			overflow: visible;
+			gap: 0.5rem;
+			overflow-x: auto;
+			overflow-y: hidden;
+			padding: 0.25rem 1.75rem;
+			scroll-behavior: smooth;
 		}
 
-		.chat-input {
+		.tag-chip {
+			flex-shrink: 0;
+			padding: 0.375rem 0.75rem;
+			border-radius: 1rem;
+			border: 2px solid rgba($white, 0.28);
+			background: #2b3037;
+			color: $text-secondary;
+			font-size: 0.8125rem;
+			font-family: inherit;
+			white-space: nowrap;
+			cursor: pointer;
+			transition: $transition-fast;
+
+			&:hover {
+				background: #363d47;
+				border-color: rgba($white, 0.35);
+				color: $text-primary;
+			}
+
+			&:active {
+				transform: scale(0.98);
+			}
+		}
+
+		.tag-scroll-btn {
+			position: absolute;
+			top: 50%;
+			transform: translateY(-50%);
+			width: 28px;
+			height: 28px;
+			background: #2a2f36;
+			border: 1px solid #4a515a;
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			cursor: pointer;
+			transition: $transition-fast;
+			z-index: 10;
+			color: #ffffff;
+			box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+			&:hover {
+				background: #363d47;
+				border-color: #5b6572;
+				transform: translateY(-50%) scale(1.05);
+			}
+		}
+
+		.tag-scroll-left { left: 0; }
+		.tag-scroll-right { right: 0; }
+	}
+
+	.input-shell {
+		position: absolute;
+		left: 0.75rem;
+		right: 0.75rem;
+		bottom: 0.75rem;
+		display: flex;
+		align-items: flex-end;
+		width: auto;
+		min-height: 52px;
+		box-sizing: border-box;
+		background: transparent;
+		padding: 0;
+		border: none;
+		overflow: visible;
+		z-index: 30;
+	}
+
+	.chat-input {
 			width: 100%;
 			min-width: 0;
 			max-width: none;
@@ -1101,9 +1102,9 @@ $btn-size-sm: 36px;
 				border-color: #5a6068;
 				box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
 			}
-		}
+	}
 
-		.send-btn {
+	.send-btn {
 			position: absolute;
 			right: 4px;
 			top: 50%;
@@ -1148,7 +1149,6 @@ $btn-size-sm: 36px;
 			&:active:not(:disabled) {
 				transform: translateY(-50%) scale(0.95);
 			}
-		}
 	}
 
 }
@@ -1157,19 +1157,31 @@ $btn-size-sm: 36px;
   .chat-widget {
     border-radius: 12px;
 
-    .input-area {
-      padding: 0.5rem;
+		.chat-area {
+			padding-bottom: 9.75rem;
+		}
 
-      .chat-input {
-        padding: 12px 56px 12px 16px;
-      }
+		.tags-area {
+			left: 0.5rem;
+			right: 0.5rem;
+			bottom: 4.125rem;
+		}
 
-      .send-btn {
-        width: 40px;
-        height: 40px;
-        right: 4px;
-      }
-    }
+		.input-shell {
+			left: 0.5rem;
+			right: 0.5rem;
+			bottom: 0.5rem;
+		}
+
+		.chat-input {
+			padding: 12px 56px 12px 16px;
+		}
+
+		.send-btn {
+			width: 40px;
+			height: 40px;
+			right: 4px;
+		}
   }
 }
 
