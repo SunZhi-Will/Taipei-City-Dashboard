@@ -1,4 +1,5 @@
 <!-- Developed by Taipei Urban Intelligence Center 2024 -->
+<script setup>
 import { useRoute, useRouter } from "vue-router";
 import { useContentStore } from "../../store/contentStore";
 
@@ -11,10 +12,10 @@ const route = useRoute();
 const router = useRouter();
 const contentStore = useContentStore();
 
-const selectDashboard = (index) => {
+const selectDashboard = (index, targetCity) => {
   // Determine city based on dashboard type
   const isPersonal = contentStore.personalDashboards.some(d => d.index === index);
-  const city = isPersonal ? undefined : (route.query.city || 'taipei');
+  const city = isPersonal ? undefined : (targetCity || route.query.city || 'taipei');
   
   router.push({ 
     query: { 
@@ -66,8 +67,8 @@ const selectDashboard = (index) => {
                 v-for="item in contentStore.getDashboardsByCity(city)"
                 :key="item.index"
                 class="switcher-item"
-                :class="{ 'is-active': contentStore.currentDashboard?.index === item.index }"
-                @click="selectDashboard(item.index)"
+                :class="{ 'is-active': contentStore.currentDashboard?.index === item.index && contentStore.currentDashboard?.city === city }"
+                @click="selectDashboard(item.index, city)"
               >
                 <span class="material-icons-round">map</span>
                 {{ item.name }}

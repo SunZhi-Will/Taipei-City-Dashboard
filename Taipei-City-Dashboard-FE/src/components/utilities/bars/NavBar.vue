@@ -70,7 +70,7 @@ const isLocalhost = computed(() => {
         <div
           class="navbar-theme-name"
           :class="{ 'navbar-theme-name--active': isDropdownOpen }"
-          @click.stop="authStore.isNarrowDevice && toggleDropdown()"
+          @click.stop="toggleDropdown()"
         >
           <span class="navbar-theme-icon material-icons-round">{{ contentStore.currentDashboard.icon }}</span>
           <span class="navbar-theme-text">{{ contentStore.currentDashboard.name }}</span>
@@ -223,7 +223,7 @@ const isLocalhost = computed(() => {
 	background-color: var(--color-component-background);
 	user-select: none;
 	position: relative;
-	z-index: 30;
+	z-index: 2001;
 	overflow: visible;
 
     &-logo {
@@ -300,19 +300,18 @@ const isLocalhost = computed(() => {
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 200px;
-        transition: opacity 0.2s;
+        cursor: pointer;
+        
+        &:active {
+          opacity: 0.7;
+        }
 
         @media screen and (max-width: 768px) {
           max-width: 160px;
           background: rgba(255, 255, 255, 0.08);
           padding: 6px 10px;
           border-radius: 8px;
-          cursor: pointer;
           min-height: 36px;
-          
-          &:active {
-            opacity: 0.7;
-          }
         }
 
         @media screen and (max-width: 480px) {

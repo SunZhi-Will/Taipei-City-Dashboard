@@ -329,25 +329,37 @@ export const useChatStore = defineStore('chat', () => {
 
 	const buildComponentNarrative = (question, components = [], aiContent = '') => {
 		const list = Array.isArray(components) ? components : [];
+		const normalizedAiContent = String(aiContent || '').trim();
+		
+		// 如果 AI 已經產出了高品質的回應（以「您好」開場且包含表格/結構），則優先採用 AI 的內容
+		const isHighQualityAiResponse = normalizedAiContent.startsWith('您好') || normalizedAiContent.includes('|');
+
 		if (list.length === 0) {
-			return String(aiContent || '').trim();
+			return normalizedAiContent;
 		}
 
 		const primary = list.find((item) => item?.isPrimary) || list[0];
 		const related = list.filter((item) => item && item !== primary);
 		const shortDesc = primary?.dashboardConfig?.short_desc || primary?.description || '';
-		const normalizedAiContent = String(aiContent || '').trim();
-		const genericAiReply = !normalizedAiContent || /主結果|相關候選|score|rag|tool|index|id|rephrase|rephrase your question|retrieve/i.test(normalizedAiContent);
+		
+		// 檢查是否為技術味太重的回應
+		const isTechnicalReply = /主結果|相關候選|score|rag|tool|index|id|rephrase|rephrase your question|retrieve/i.test(normalizedAiContent);
 
-		const intro = `我先幫您整理成最值得直接查看的圖表：${primary?.name || '相關指標'}。`;
-		const summary = shortDesc ? `這個指標重點在於${shortDesc}。` : `這張圖表最能直接回應您剛剛提到的「${question}」。`;
-		const relatedHint = summarizeRelatedComponents(related);
-
-		if (genericAiReply) {
-			return [intro, summary, relatedHint].filter(Boolean).join(' ');
+		if (isHighQualityAiResponse && !isTechnicalReply) {
+			return normalizedAiContent;
 		}
 
-		return [normalizedAiContent, relatedHint].filter(Boolean).join(' ');
+		// Fallback 模板（當 AI 回應不理想時）
+		const intro = `您好 😊 \n 關於您的問題「${question}」，我為您推薦以下相關組件清單：`;
+		const summary = shortDesc ? `其中「${primary?.name}」重點在於${shortDesc}。` : `這張圖表最能直接回應您的需求。`;
+		const relatedHint = summarizeRelatedComponents(related);
+		const footer = `\n 您可以將這些組件整批加入「個人儀表板」，方便日後快速查看與使用。 \n 若您有任何新的查詢或想深入探索的內容，都可以隨時告訴我 💬✨`;
+
+		if (isTechnicalReply || !normalizedAiContent) {
+			return [intro, summary, relatedHint, footer].filter(Boolean).join('\n');
+		}
+
+		return [normalizedAiContent, relatedHint].filter(Boolean).join('\n');
 	};
 
   	const addChatData = (newChatData) => {
@@ -397,6 +409,11 @@ export const useChatStore = defineStore('chat', () => {
 						answerMode: twaiResult.answerMode,
 						selectionReason: twaiResult.agentResult?.selection_reason,
 						usedTools: twaiResult.tools,
+						button: components.length > 0 ? [{ id: 1, text: '建立儀表板' }] : undefined,
+						relations: components.length > 0 ? components.map(c => ({
+							...c,
+							city_display: c.city === 'metrotaipei' ? '雙北' : '臺北'
+						})) : undefined,
 						scene: resolveSceneFromAI(
 							newChatData.content,
 							twaiResult.content,
@@ -428,7 +445,7 @@ export const useChatStore = defineStore('chat', () => {
 
 	const buildTwaiMessages = (latestUserInput, includeHistory = true) => {
 		const systemPrompt =
-			'你是臺北城市儀表板小幫手。回覆對象是一般使用者，不是工程師。若使用者在查某個指標、圖表、組件或想看資料，必須先呼叫 retrieve_components_by_query 再回答。取得檢索結果後，請自行整合成自然、完整、可直接理解的繁體中文答案，優先指出最值得先看的圖表與原因，必要時再補充 1 到 3 個延伸指標。不要暴露 RAG、tool、score、index、id、主結果、候選、檢索排序等中繼資訊。若沒有合適結果，直接用白話說明限制並提供下一步建議。';
+			'你是臺北市城市大數據儀表板的智慧助理。回覆對象是一般市民，語氣要親切、專業並適度使用 emoji 😊。\n1. 始終以「您好 😊」開場。\n2. 若使用者在查詢指標、圖表或組件，必須先呼叫 retrieve_components_by_query。\n3. 取得結果後，請以 Markdown 表格呈現推薦清單，欄位「僅限」包含：排名、城市名、組件名。絕對不要出現「關聯性」或任何評分分數。\n4. 「城市名」請根據結果填入「臺北」或「雙北」，嚴禁出現 metrotaipei 或 taipei 等技術字眼。\n5. 表格後說明：「您可以將這些組件整批加入『個人儀表板』，方便日後快速查看與使用。」\n6. 結尾提供溫馨提示，如：「若您有任何新的查詢或想深入探索的內容，都可以隨時告訴我 💬✨」。\n7. 嚴禁在回答中出現 RAG、tool、score、index、id、主結果、候選、檢索、關聯性、分數、相似度等技術中繼用語。';
 
 		if (!includeHistory) {
 			return [

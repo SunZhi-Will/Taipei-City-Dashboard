@@ -187,6 +187,69 @@ const scrollToBottom = async () => {
 	chat.scrollTop = chat.scrollHeight - chat.clientHeight;
 };
 
+const renderContent = (content) => {
+	if (!content) return "";
+	
+	const lines = content.split('\n');
+	let inTable = false;
+	let result = [];
+	let tableRows = [];
+
+	const generateTableHtml = (rows) => {
+		if (rows.length === 0) return "";
+		let html = '<div class="ai-table-wrapper"><table class="ai-table">';
+		rows.forEach((row, index) => {
+			if (index === 0) html += '<thead>';
+			if (index === 1) html += '<tbody>';
+			
+			// 恢復所有列，並進行必要的顯示名稱轉換
+			html += '<tr>';
+			row.forEach((cell, cellIdx) => {
+				const tag = index === 0 ? 'th' : 'td';
+				let displayCell = cell;
+				// 轉換城市名（僅限城市名稱欄位）
+				if (cellIdx === 1) {
+					if (cell === 'metrotaipei') displayCell = '雙北';
+					if (cell === 'taipei') displayCell = '臺北';
+				}
+				html += `<${tag}>${displayCell}</${tag}>`;
+			});
+			html += '</tr>';
+			
+			if (index === 0) html += '</thead>';
+		});
+		if (rows.length > 1) html += '</tbody>';
+		html += '</table></div>';
+		return html;
+	};
+
+	for (let line of lines) {
+		const trimmed = line.trim();
+		if (trimmed.startsWith('|') && (trimmed.includes('|') || trimmed.endsWith('|'))) {
+			if (!inTable) {
+				inTable = true;
+				tableRows = [];
+			}
+			const cells = trimmed.split('|').map(c => c.trim()).filter((c, i, arr) => i > 0 && i < arr.length - 1);
+			if (trimmed.includes('---')) continue;
+			if (cells.length > 0) {
+				tableRows.push(cells);
+			}
+		} else {
+			if (inTable) {
+				result.push(generateTableHtml(tableRows));
+				inTable = false;
+			}
+			if (trimmed) {
+				result.push(`<p>${line}</p>`);
+			}
+		}
+	}
+	if (inTable) result.push(generateTableHtml(tableRows));
+	
+	return result.join('');
+};
+
 onMounted(() => {
 	scrollToBottom();
 });
@@ -253,9 +316,9 @@ watch(
           <div class="content">
             <div
               v-if="chat.content"
-              class="message--plain"
+              class="message--plain message--markdown"
+              v-html="renderContent(chat.content)"
             >
-              <p>{{ chat.content }}</p>
             </div>
             <ChatResultComponents
               v-if="chat.components && chat.components.length > 0"
@@ -281,7 +344,7 @@ watch(
                   </h4>
                   <div class="card-meta">
                     <span class="card-city">
-                      {{ item.city === "taipei" ? "🏙️ 臺北" : "🌆 雙北" }}
+                      {{ item.city_display || (item.city === "taipei" ? "🏙️ 臺北" : "🌆 雙北") }}
                     </span>
                   </div>
                 </div>
@@ -483,6 +546,9 @@ $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 					flex-direction: column;
 					gap: 0.5rem;
 					max-width: 100%;
+					flex: 1;
+					width: 100%;
+					min-width: 0;
 
 					.dashboard-cards-area {
 						display: grid;
@@ -567,6 +633,44 @@ $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 					}
 
 					.message--plain {
+						width: 100%;
+						&.message--markdown {
+							width: 100%;
+							:deep(p) { margin: 0 0 0.5rem 0; width: 100%; }
+							:deep(.ai-table-wrapper) {
+								margin: 12px 0;
+								width: 100% !important;
+								display: block;
+								overflow-x: auto;
+								border-radius: 8px;
+								border: 1px solid rgba(255,255,255,0.1);
+								background: rgba(255,255,255,0.03);
+								box-sizing: border-box;
+							}
+							:deep(.ai-table) {
+								width: 100% !important;
+								min-width: 100% !important;
+								border-collapse: collapse;
+								font-size: 13px;
+								text-align: left;
+								table-layout: fixed;
+								box-sizing: border-box;
+								th, td {
+									padding: 10px 12px;
+									border-bottom: 1px solid rgba(255,255,255,0.05);
+									word-break: break-word;
+								}
+								th:nth-child(1), td:nth-child(1) { width: 50px; text-align: center; } /* 排名 */
+								th:nth-child(2), td:nth-child(2) { width: 70px; } /* 城市名 */
+								/* 其他欄位（組件名、關聯性）會自動分配剩餘空間 */
+								th {
+									background: rgba(255,255,255,0.05);
+									font-weight: 600;
+									color: #00d4ff;
+								}
+								tr:last-child td { border-bottom: none; }
+							}
+						}
 						p {
 							color: $text-secondary;
 							white-space: pre-line;

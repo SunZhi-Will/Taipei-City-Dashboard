@@ -167,7 +167,7 @@ export const useAuthStore = defineStore("auth", {
 			if (window.matchMedia("(pointer:fine)").matches) {
 				this.isMobileDevice = false;
 			}
-			if (window.innerWidth < 750) {
+			if (window.innerWidth < 768) {
 				this.isNarrowDevice = true;
 			}
 		},
