@@ -570,6 +570,9 @@ function returnChartComponent(name, svg) {
 	font-family: "微軟正黑體", "Microsoft JhengHei", "Droid Sans", "Open Sans",
 		"Helvetica";
 	overflow: hidden;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar { width: 0; height: 0; }
 }
 
 button {
@@ -820,7 +823,10 @@ button:hover {
 		height: 75%;
 		position: relative;
 		padding-top: 1%;
-		overflow-y: scroll;
+		overflow-y: auto;
+		scrollbar-width: none;
+
+		&::-webkit-scrollbar { width: 0; }
 
 		p {
 			color: var(--color-border);
@@ -938,7 +944,10 @@ button:hover {
 		padding-top: 0%;
 		height: 80%;
 		position: relative;
-		overflow-y: scroll;
+		overflow-y: auto;
+		scrollbar-width: none;
+
+		&::-webkit-scrollbar { width: 0; }
 
 		p {
 			color: var(--color-border);

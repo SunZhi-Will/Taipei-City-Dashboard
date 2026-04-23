@@ -116,11 +116,16 @@ const handleOpenMap = async (component) => {
 	const mapConfig = component?.dashboardConfig?.map_config;
 	if (!Array.isArray(mapConfig) || mapConfig.length === 0 || !mapConfig[0]) return;
 	const city = component?.dashboardConfig?.city || contentStore.currentDashboard?.city || "taipei";
-	const index = contentStore.currentDashboard?.index || "map-layers";
+	const index = `map-layers-${city}`;
 	const openComponentId = component?.dashboardConfig?.id;
 	await router.push({
 		name: "mapview",
-		query: { index, city, ...(openComponentId ? { openComponentId: String(openComponentId) } : {}) },
+		query: {
+			index,
+			city,
+			openTrigger: String(Date.now()),
+			...(openComponentId ? { openComponentId: String(openComponentId) } : {}),
+		},
 	});
 };
 
@@ -163,17 +168,31 @@ const onScroll = () => {
       @scroll.passive="onScroll"
     >
       <!-- Empty -->
-      <div v-if="chatData.length === 0 && !isResponding" class="acp__empty">
+      <div
+        v-if="chatData.length === 0 && !isResponding"
+        class="acp__empty"
+      >
         <span class="material-icons-round acp__empty-icon">smart_toy</span>
         <p>輸入城市議題，AI 將推薦相關組件並生成場景</p>
       </div>
 
       <!-- Messages -->
-      <template v-for="chat in chatData" :key="chat.id">
+      <template
+        v-for="chat in chatData"
+        :key="chat.id"
+      >
         <!-- Bot -->
-        <div v-if="chat.role === 'bot'" class="acp__row acp__row--bot">
+        <div
+          v-if="chat.role === 'bot'"
+          class="acp__row acp__row--bot"
+        >
           <div class="acp__bot-block">
-            <p v-if="chat.content" class="acp__bot-text">{{ chat.content }}</p>
+            <p
+              v-if="chat.content"
+              class="acp__bot-text"
+            >
+              {{ chat.content }}
+            </p>
             <ChatResultComponents
               v-if="chat.components && chat.components.length > 0"
               :components="chat.components"
@@ -181,33 +200,53 @@ const onScroll = () => {
               @explore="handleExploreIndicator"
               @open-map="handleOpenMap"
             />
-            <div v-if="chat.relations && chat.relations.length > 0" class="acp__relations">
-              <div v-for="(item, idx) in chat.relations" :key="idx" class="acp__relation-item">
+            <div
+              v-if="chat.relations && chat.relations.length > 0"
+              class="acp__relations"
+            >
+              <div
+                v-for="(item, idx) in chat.relations"
+                :key="idx"
+                class="acp__relation-item"
+              >
                 <span>{{ item.city === 'taipei' ? '🏙️' : '🌆' }}</span>
                 <span class="acp__relation-name">{{ item.name }}</span>
               </div>
             </div>
-            <div v-if="chat.button" class="acp__actions">
+            <div
+              v-if="chat.button"
+              class="acp__actions"
+            >
               <button
                 v-for="btn in chat.button"
                 :key="btn.id"
                 class="acp__action-btn"
                 @click="qaBtnHandler(btn.text, chat.relations)"
-              >{{ btn.text }}</button>
+              >
+                {{ btn.text }}
+              </button>
             </div>
           </div>
         </div>
 
         <!-- User -->
-        <div v-else class="acp__row acp__row--user">
+        <div
+          v-else
+          class="acp__row acp__row--user"
+        >
           <div class="acp__user-bubble">
-            <p class="acp__user-text">{{ chat.content }}</p>
+            <p class="acp__user-text">
+              {{ chat.content }}
+            </p>
           </div>
         </div>
       </template>
 
       <!-- Typing -->
-      <div v-if="isResponding" class="acp__row acp__row--bot">
+      <div
+        v-if="isResponding"
+        class="acp__row acp__row--bot"
+      >
         <div class="acp__typing">
           <span class="acp__dot" />
           <span class="acp__dot" />
@@ -230,19 +269,19 @@ const onScroll = () => {
     </Transition>
 
     <!-- Tags row -->
-		<SuggestedTagsBar
-			v-if="!isResponding && suggestedTags.length > 0"
-			:tags="suggestedTags"
-			@select="clickTag"
-		/>
+    <SuggestedTagsBar
+      v-if="!isResponding && suggestedTags.length > 0"
+      :tags="suggestedTags"
+      @select="clickTag"
+    />
 
     <!-- Composer -->
-		<ChatComposer
-			v-model="userMessage"
-			:is-responding="isResponding"
-				:compact="true"
-			@send="sendBtnHandler"
-		/>
+    <ChatComposer
+      v-model="userMessage"
+      :is-responding="isResponding"
+      :compact="true"
+      @send="sendBtnHandler"
+    />
   </div>
 </template>
 

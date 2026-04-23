@@ -55,15 +55,15 @@ onMounted(() => {
 </script>
 
 <template>
-	<div
-		class="input-shell"
-		:class="{ 'input-shell--compact': compact }"
-	>
+  <div
+    class="input-shell"
+    :class="{ 'input-shell--compact': compact }"
+  >
     <textarea
       ref="chatInputRef"
       :model-value="modelValue"
       class="chat-input"
-			:class="{ 'chat-input--compact': compact }"
+      :class="{ 'chat-input--compact': compact }"
       rows="1"
       :placeholder="isResponding ? '小幫手回應中...' : '輸入訊息（Shift+Enter 換行）...'"
       aria-label="輸入聊天訊息"
@@ -74,7 +74,7 @@ onMounted(() => {
     <button
       type="button"
       class="send-btn"
-			:class="{ 'send-btn--compact': compact }"
+      :class="{ 'send-btn--compact': compact }"
       :disabled="isResponding || !modelValue.trim()"
       :aria-label="isResponding ? '訊息發送中' : '發送訊息'"
       @click="emit('send')"

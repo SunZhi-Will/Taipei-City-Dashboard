@@ -14,8 +14,18 @@ const buildDefaultScene = () => ({
 			width: 380,
 		},
 		rightPanel: {
-			mode: "components",
+			mode: "presentation",
 		},
+	},
+	presentation: {
+		style: "carousel",
+		autoplay: {
+			enabled: true,
+			intervalMs: 10000,
+		},
+		audience: "public-screen",
+		industry: "general",
+		slides: [],
 	},
 	blocks: [],
 	meta: {
@@ -51,6 +61,39 @@ const sanitizeScene = (scene) => {
 						? scene.layout.rightPanel.mode
 						: fallback.layout.rightPanel.mode,
 			},
+		},
+		presentation: {
+			style:
+				typeof scene?.presentation?.style === "string"
+					? scene.presentation.style
+					: fallback.presentation.style,
+			autoplay: {
+				enabled:
+					typeof scene?.presentation?.autoplay?.enabled === "boolean"
+						? scene.presentation.autoplay.enabled
+						: fallback.presentation.autoplay.enabled,
+				intervalMs:
+					typeof scene?.presentation?.autoplay?.intervalMs === "number"
+						? scene.presentation.autoplay.intervalMs
+						: fallback.presentation.autoplay.intervalMs,
+			},
+			audience:
+				typeof scene?.presentation?.audience === "string"
+					? scene.presentation.audience
+					: fallback.presentation.audience,
+			industry:
+				typeof scene?.presentation?.industry === "string"
+					? scene.presentation.industry
+					: fallback.presentation.industry,
+			slides: toArray(scene?.presentation?.slides).map((slide, index) => ({
+				id: slide?.id || `slide-${index + 1}`,
+				type: slide?.type || "component",
+				title: slide?.title || "未命名投影片",
+				subtitle: slide?.subtitle || "",
+				focusComponentId: slide?.focusComponentId,
+				durationSec:
+					typeof slide?.durationSec === "number" ? slide.durationSec : 10,
+			})),
 		},
 		blocks: toArray(scene.blocks).map((block) => ({
 			type: block?.type || "component",
@@ -94,8 +137,9 @@ export const useAIStudioStore = defineStore("aiStudio", () => {
 	};
 
 	const setRightMode = (mode) => {
-		if (!["components", "map", "web"].includes(mode)) return;
+		if (!["components", "map", "web", "presentation"].includes(mode)) return;
 		scene.value.layout.rightPanel.mode = mode;
+		scene.value.presentation.autoplay.enabled = mode === "presentation";
 		scene.value.meta.updatedAt = new Date().toISOString();
 	};
 

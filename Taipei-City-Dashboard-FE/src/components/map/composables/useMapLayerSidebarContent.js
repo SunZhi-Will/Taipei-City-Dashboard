@@ -1,4 +1,5 @@
 import { computed, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { useAuthStore } from "../../../store/authStore";
 import { useContentStore } from "../../../store/contentStore";
 import { useDialogStore } from "../../../store/dialogStore";
@@ -10,6 +11,7 @@ export function useMapLayerSidebarContent(emit) {
 	const contentStore = useContentStore();
 	const dialogStore = useDialogStore();
 	const mapStore = useMapStore();
+	const route = useRoute();
 
 	const privateCollapsed = ref(false);
 	const publicCollapsed = ref(false);
@@ -21,6 +23,8 @@ export function useMapLayerSidebarContent(emit) {
 	const loadingDashboardKey = ref("");
 	const dashboardComponentsCache = ref({});
 	const componentToggles = ref({});
+	const activatedOpenComponentId = ref(null);
+	const queuedOpenComponentId = ref(null);
 
 	const favoriteDashboard = computed(() => {
 		return contentStore.favorites?.index ? contentStore.favorites : null;
@@ -60,6 +64,74 @@ export function useMapLayerSidebarContent(emit) {
 			component.map_config.length > 0 &&
 			Boolean(component.map_config[0])
 		);
+	}
+
+	function isComponentVisible(component) {
+		if (!hasMapConfig(component)) return false;
+		return component.map_config.some((item) =>
+			mapStore.currentVisibleLayers.includes(
+				`${item.index}-${item.type}-${item.city}`,
+			),
+		);
+	}
+
+	function findOpenComponentById(openComponentId) {
+		const targetId = String(openComponentId);
+		const current = (contentStore.currentDashboard.components || []).find(
+			(item) => String(item.id) === targetId,
+		);
+		if (current) return current;
+
+		const mapLayer = (contentStore.mapLayers || []).find(
+			(item) => String(item.id) === targetId,
+		);
+		if (mapLayer) return mapLayer;
+
+		const dashboardIndex = String(route.query.index || "");
+		const cached = (dashboardComponentsCache.value[dashboardIndex] || []).find(
+			(item) => String(item.id) === targetId,
+		);
+		return cached || null;
+	}
+
+	function activateOpenComponent(component, openComponentId) {
+		const targetId = String(openComponentId);
+		if (
+			activatedOpenComponentId.value === targetId &&
+			isComponentVisible(component)
+		) {
+			return;
+		}
+
+		const applyActivation = () => {
+			if (
+				activatedOpenComponentId.value === targetId &&
+				isComponentVisible(component)
+			) {
+				return;
+			}
+			mapStore.addToMapLayerList(component.map_config);
+			const key = componentKey(
+				{ index: contentStore.currentDashboard.index },
+				contentStore.currentDashboard.city,
+				component,
+			);
+			componentToggles.value[key] = true;
+			activatedOpenComponentId.value = targetId;
+			queuedOpenComponentId.value = null;
+		};
+
+		const {map} = mapStore;
+		if (!map) return;
+
+		if (map.isStyleLoaded?.()) {
+			applyActivation();
+			return;
+		}
+
+		if (queuedOpenComponentId.value === targetId) return;
+		queuedOpenComponentId.value = targetId;
+		map.once("load", applyActivation);
 	}
 
 	function getUniquePrivateComponents(components) {
@@ -140,6 +212,51 @@ export function useMapLayerSidebarContent(emit) {
 			if (!cities.includes(selectedPublicCity.value) && cities.length > 0) {
 				selectedPublicCity.value = cities[0];
 			}
+		},
+		{ immediate: true },
+	);
+
+	watch(
+		() => route.query.city,
+		(city) => {
+			if (city && publicCityOptions.value.includes(city)) {
+				selectedPublicCity.value = city;
+			}
+		},
+		{ immediate: true },
+	);
+
+	watch(
+		() => [route.query.index, route.query.city],
+		([index, city]) => {
+			if (!index) return;
+
+			const scope = city ? "public" : "private";
+			const key = buildDashboardKey(scope, index, city);
+			expandedDashboardMap.value[key] = true;
+			ensureDashboardComponents(index);
+		},
+		{ immediate: true },
+	);
+
+	watch(
+		() => [
+			route.query.openComponentId,
+			route.query.openTrigger,
+			contentStore.currentDashboard.index,
+			contentStore.currentDashboard.city,
+			contentStore.currentDashboard.components?.length || 0,
+			contentStore.mapLayers?.length || 0,
+			Boolean(mapStore.map),
+		],
+		([openComponentId]) => {
+			if (!openComponentId) return;
+
+			const component = findOpenComponentById(openComponentId);
+
+			if (!component || !hasMapConfig(component)) return;
+
+			activateOpenComponent(component, openComponentId);
 		},
 		{ immediate: true },
 	);

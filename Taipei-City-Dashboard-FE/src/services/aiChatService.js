@@ -11,7 +11,6 @@ import http from "../router/axios";
 import { isOfficialComponent } from "../constants/nonOfficialComponentIndexes";
 import { getComponentDataTimeframe } from "../assets/utilityFunctions/dataTimeframe";
 
-const USE_TWAI_CHAT = (import.meta.env.VITE_USE_TWAI_CHAT ?? "true") !== "false";
 const MAX_CONTEXT_MESSAGES = 12;
 const TWAI_MAX_RETRY = 2;
 
@@ -298,9 +297,51 @@ export const extractSceneJson = (text = '') => {
 
 export const buildFallbackScene = (question = '', components = [], preferredMode = 'components') => {
 	const safeComponents = Array.isArray(components) ? components : [];
-	const rightMode = ['components', 'map', 'web'].includes(preferredMode)
+	const normalizedQuestion = String(question || '');
+	const isShowcaseIntent = /輪播|形象|展示|大螢幕|看板|signage|宣傳|播映/i.test(normalizedQuestion);
+	const rightMode = ['components', 'map', 'web', 'presentation'].includes(preferredMode)
 		? preferredMode
-		: 'components';
+		: isShowcaseIntent
+			? 'presentation'
+			: 'components';
+
+	const industry = (() => {
+		if (/交通|捷運|公車|車流|壅塞/i.test(normalizedQuestion)) return 'transport';
+		if (/老人|高齡|長照|扶養|社福/i.test(normalizedQuestion)) return 'senior-care';
+		if (/學校|校園|學生|教育/i.test(normalizedQuestion)) return 'education';
+		if (/醫療|健康|醫院|防疫/i.test(normalizedQuestion)) return 'health';
+		return 'general';
+	})();
+
+	const buildPresentationSlides = () => {
+		const headline = normalizedQuestion.slice(0, 30) || '城市議題展示';
+		const heroSlide = {
+			id: 'hero',
+			type: 'hero',
+			title: `${headline} 即時展示`,
+			subtitle: '由 AI Agent 自動編排內容與節奏，適合校園與政府看板。',
+			durationSec: 10,
+		};
+
+		const componentSlides = safeComponents.slice(0, 4).map((item, index) => ({
+			id: `component-${item?.id || index}`,
+			type: 'component',
+			title: item?.name || `重點指標 ${index + 1}`,
+			subtitle: item?.dashboardConfig?.short_desc || 'AI 選出的高相關指標畫面。',
+			focusComponentId: item?.id,
+			durationSec: 12,
+		}));
+
+		const closingSlide = {
+			id: 'closing',
+			type: 'closing',
+			title: '持續追蹤與即時更新',
+			subtitle: '更多資料與互動分析請至 Taipei City Dashboard。',
+			durationSec: 8,
+		};
+
+		return [heroSlide, ...componentSlides, closingSlide];
+	};
 
 	return {
 		version: '1.0',
@@ -315,6 +356,16 @@ export const buildFallbackScene = (question = '', components = [], preferredMode
 			rightPanel: {
 				mode: rightMode,
 			},
+		},
+		presentation: {
+			style: rightMode === 'presentation' ? (isShowcaseIntent ? 'carousel' : 'briefing') : 'component-grid',
+			autoplay: {
+				enabled: rightMode === 'presentation',
+				intervalMs: 10000,
+			},
+			audience: 'public-screen',
+			industry,
+			slides: rightMode === 'presentation' ? buildPresentationSlides() : [],
 		},
 		blocks: safeComponents.map((item) => ({
 			type: 'component',
@@ -333,7 +384,24 @@ export const buildFallbackScene = (question = '', components = [], preferredMode
 
 export const resolveSceneFromAI = (question = '', aiRawContent = '', components = [], preferredMode = 'components') => {
 	const extracted = extractSceneJson(aiRawContent);
-	if (extracted) return extracted;
+	if (extracted) {
+		if (!extracted?.presentation && /輪播|形象|展示|看板|大螢幕|signage/i.test(String(question || ''))) {
+			const enhancedMode = extracted?.layout?.rightPanel?.mode || 'presentation';
+			return {
+				...buildFallbackScene(question, components, enhancedMode),
+				...extracted,
+				layout: {
+					...buildFallbackScene(question, components, enhancedMode).layout,
+					...extracted.layout,
+					rightPanel: {
+						...buildFallbackScene(question, components, enhancedMode).layout.rightPanel,
+						...extracted?.layout?.rightPanel,
+					},
+				},
+			};
+		}
+		return extracted;
+	}
 	return buildFallbackScene(question, components, preferredMode);
 };
 

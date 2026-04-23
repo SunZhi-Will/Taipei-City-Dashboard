@@ -164,7 +164,7 @@ const handleOpenMap = async (component) => {
 	if (!Array.isArray(mapConfig) || mapConfig.length === 0 || !mapConfig[0]) return;
 
 	const city = component?.dashboardConfig?.city || contentStore.currentDashboard?.city || "taipei";
-	const index = contentStore.currentDashboard?.index || "map-layers";
+	const index = `map-layers-${city}`;
 	const openComponentId = component?.dashboardConfig?.id;
 
 	await router.push({
@@ -172,6 +172,7 @@ const handleOpenMap = async (component) => {
 		query: {
 			index,
 			city,
+			openTrigger: String(Date.now()),
 			...(openComponentId ? { openComponentId: String(openComponentId) } : {}),
 		},
 	});

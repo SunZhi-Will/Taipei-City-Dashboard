@@ -35,7 +35,7 @@ watch(islandCollapsed, (newVal) => {
       class="map-island"
       :class="{ 'map-island-collapsed': islandCollapsed }"
     >
-			<MapLayerSidebarContent @switch-dashboard="switchDashboard" />
+      <MapLayerSidebarContent @switch-dashboard="switchDashboard" />
     </aside>
 
     <button

@@ -36,7 +36,7 @@
 	color: var(--color-normal-text);
 	font-family: "微軟正黑體", "Microsoft JhengHei", "Droid Sans", "Open Sans",
 		"Helvetica";
-	overflow: hidden;
+	/* overflow: hidden; */
 }
 
 h1 {
@@ -137,7 +137,7 @@ table {
 	border-radius: 5px;
 	border-collapse: collapse;
 	overflow-x: auto;
-	overflow-y: scroll;
+	overflow-y: auto;
 	white-space: nowrap;
 }
 

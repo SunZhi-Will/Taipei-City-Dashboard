@@ -210,22 +210,22 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-container">
     <NotificationBar />
-		<NavBar
-			v-if="
-				authStore.currentPath !== 'embed' &&
-					authStore.currentPath !== 'mapview'
-			"
-		/>
-		<!-- /mapview standalone fullscreen layout -->
-		<div
-			v-if="authStore.currentPath === 'mapview'"
-			class="app-mapview-layout"
-		>
-			<RouterView />
-		</div>
+    <NavBar
+      v-if="
+        authStore.currentPath !== 'embed' &&
+          authStore.currentPath !== 'mapview'
+      "
+    />
+    <!-- /mapview standalone fullscreen layout -->
+    <div
+      v-if="authStore.currentPath === 'mapview'"
+      class="app-mapview-layout"
+    >
+      <RouterView />
+    </div>
     <!-- /mapview, /dashboard layouts -->
     <div
-			v-else-if="authStore.currentPath === 'dashboard'"
+      v-else-if="authStore.currentPath === 'dashboard'"
       class="app-content"
     >
       <SideBar />
@@ -260,16 +260,16 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-		<div
-			v-else-if="authStore.currentPath === 'ai-studio'"
-			class="app-content"
-		>
-			<div class="app-content-main">
-				<div class="app-content-body app-content-body--flush">
-					<RouterView />
-				</div>
-			</div>
-		</div>
+    <div
+      v-else-if="authStore.currentPath === 'ai-studio'"
+      class="app-content"
+    >
+      <div class="app-content-main">
+        <div class="app-content-body app-content-body--flush">
+          <RouterView />
+        </div>
+      </div>
+    </div>
     <div v-else>
       <router-view />
     </div>

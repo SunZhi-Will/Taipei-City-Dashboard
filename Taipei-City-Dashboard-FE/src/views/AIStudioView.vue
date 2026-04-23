@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import AIStudioChatPanel from "../components/ai-studio/AIStudioChatPanel.vue";
+import AIStudioPresentationCanvas from "../components/ai-studio/AIStudioPresentationCanvas.vue";
 import DashboardComponent from "../dashboardComponent/DashboardComponent.vue";
 import MapContainer from "../components/map/MapContainer.vue";
 import { useChatStore } from "../store/chatStore";
@@ -55,6 +56,13 @@ const componentCards = computed(() => {
 	return latestComponents.value.filter((item) => item?.dashboardConfig);
 });
 
+const hasSceneContent = computed(() => {
+	const slidesLength = Array.isArray(scene.value?.presentation?.slides)
+		? scene.value.presentation.slides.length
+		: 0;
+	return sceneBlocks.value.length > 0 || componentCards.value.length > 0 || slidesLength > 0;
+});
+
 watch(
 	lastBotMessage,
 	(nextValue) => {
@@ -84,27 +92,27 @@ onBeforeUnmount(() => {
         >
           <span class="icon">smart_toy</span>AI Studio
         </span>
-				<div class="aistudio-left-actions">
-					<button
-						v-if="!scene.layout.leftPanel.collapsed"
-						class="icon-btn"
-						title="清除聊天紀錄"
-						@click="clearChatConfirm"
-					>
-						<span class="icon">delete_sweep</span>
-					</button>
-					<button
-						class="icon-btn"
-						:title="scene.layout.leftPanel.collapsed ? '展開面板' : '收合面板'"
-						@click="aiStudioStore.toggleLeftPanel()"
-					>
-						<span class="icon">{{
-							scene.layout.leftPanel.collapsed
-								? "keyboard_double_arrow_right"
-								: "keyboard_double_arrow_left"
-						}}</span>
-					</button>
-				</div>
+        <div class="aistudio-left-actions">
+          <button
+            v-if="!scene.layout.leftPanel.collapsed"
+            class="icon-btn"
+            title="清除聊天紀錄"
+            @click="clearChatConfirm"
+          >
+            <span class="icon">delete_sweep</span>
+          </button>
+          <button
+            class="icon-btn"
+            :title="scene.layout.leftPanel.collapsed ? '展開面板' : '收合面板'"
+            @click="aiStudioStore.toggleLeftPanel()"
+          >
+            <span class="icon">{{
+              scene.layout.leftPanel.collapsed
+                ? "keyboard_double_arrow_right"
+                : "keyboard_double_arrow_left"
+            }}</span>
+          </button>
+        </div>
       </div>
 
       <!-- body: hidden when collapsed -->
@@ -121,6 +129,43 @@ onBeforeUnmount(() => {
 
     <!-- ── RIGHT PANEL ── -->
     <section class="aistudio-right">
+      <div class="aistudio-toolbar">
+        <div class="mode-switch">
+          <button
+            class="mode-btn"
+            :class="{ active: selectedMode === 'presentation' }"
+            @click="aiStudioStore.setRightMode('presentation')"
+          >
+            <span class="icon">slideshow</span>
+            <span>輪播展示</span>
+          </button>
+          <button
+            class="mode-btn"
+            :class="{ active: selectedMode === 'components' }"
+            @click="aiStudioStore.setRightMode('components')"
+          >
+            <span class="icon">dashboard_customize</span>
+            <span>圖表牆</span>
+          </button>
+          <button
+            class="mode-btn"
+            :class="{ active: selectedMode === 'map' }"
+            @click="aiStudioStore.setRightMode('map')"
+          >
+            <span class="icon">map</span>
+            <span>地圖</span>
+          </button>
+        </div>
+        <div class="toolbar-actions">
+          <button
+            class="icon-btn"
+            :title="showSceneJson ? '隱藏 Scene JSON' : '顯示 Scene JSON'"
+            @click="showSceneJson = !showSceneJson"
+          >
+            <span class="icon">data_object</span>
+          </button>
+        </div>
+      </div>
 
       <!-- canvas area -->
       <div
@@ -129,9 +174,31 @@ onBeforeUnmount(() => {
       >
         <!-- canvas body -->
         <div class="canvas-body">
+          <div
+            v-if="selectedMode === 'presentation'"
+            class="canvas-inner canvas-inner--presentation"
+          >
+            <AIStudioPresentationCanvas
+              v-if="hasSceneContent"
+              :scene="scene"
+              :components="componentCards"
+              :city-manager="contentStore.cityManager"
+            />
+            <div
+              v-else
+              class="canvas-empty"
+            >
+              <span class="icon canvas-empty-icon">slideshow</span>
+              <p>輸入需求後，AI Agent 會自動生成輪播畫面</p>
+              <p class="canvas-empty-sub">
+                可直接用於校園或政府大螢幕展示
+              </p>
+            </div>
+          </div>
+
           <!-- components mode -->
           <div
-            v-if="selectedMode === 'components'"
+            v-else-if="selectedMode === 'components'"
             class="canvas-inner"
           >
             <div
@@ -140,20 +207,26 @@ onBeforeUnmount(() => {
             >
               <span class="icon canvas-empty-icon">smart_toy</span>
               <p>透過左側 AI 對話取得推薦組件</p>
-              <p class="canvas-empty-sub">組件將自動渲染至此畫布</p>
+              <p class="canvas-empty-sub">
+                組件將自動渲染至此畫布
+              </p>
             </div>
             <div
               v-else
               class="component-grid scrollbar-custom"
             >
-              <DashboardComponent
+              <div
                 v-for="item in componentCards"
                 :key="`${item.id}-${item.city}`"
-                :config="item.dashboardConfig"
-                :active-city="item.city || item.dashboardConfig.city"
-                :city-tag="contentStore.cityManager.getTagList(item.city || item.dashboardConfig.city)"
-                :style="{ height: '320px', width: '100%' }"
-              />
+                class="component-card-wrap"
+              >
+                <DashboardComponent
+                  :config="item.dashboardConfig"
+                  :active-city="item.city || item.dashboardConfig.city"
+                  :city-tag="contentStore.cityManager.getTagList(item.city || item.dashboardConfig.city)"
+                  :style="{ height: '320px', width: '100%' }"
+                />
+              </div>
             </div>
           </div>
 
@@ -162,7 +235,12 @@ onBeforeUnmount(() => {
             v-else-if="selectedMode === 'map'"
             class="canvas-inner canvas-inner--map"
           >
-            <MapContainer />
+            <MapContainer v-if="mapStore.map" />
+            <div v-else class="canvas-empty">
+              <span class="icon canvas-empty-icon">map</span>
+              <p>請先前往地圖頁以初始化地圖資源</p>
+              <p class="canvas-empty-sub">初始化後回到此頁即可在此顯示</p>
+            </div>
           </div>
 
           <!-- web mode -->
@@ -436,10 +514,14 @@ $left-w: 360px;
 .canvas-inner {
 	flex: 1;
 	min-height: 0;
-	overflow: hidden;
+	overflow: auto;
 
 	&--map {
-		/* MapContainer needs 100% */
+		overflow: hidden;
+	}
+
+	&--presentation {
+		overflow: hidden;
 	}
 
 	&--web {
@@ -486,9 +568,12 @@ $left-w: 360px;
 	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 	gap: 14px;
 	padding: 14px;
-	height: 100%;
-	overflow: auto;
 	align-content: start;
+}
+
+.component-card-wrap {
+	overflow: hidden;
+	border-radius: 8px;
 }
 
 /* ── Scene JSON drawer ───────────────────────────────────────── */

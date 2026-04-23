@@ -89,7 +89,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="mapcontainer" v-bind="$attrs">
+  <div
+    class="mapcontainer"
+    v-bind="$attrs"
+  >
     <div class="mapcontainer-map">
       <!-- #mapboxBox needs to be empty to ensure Mapbox performance -->
       <div id="mapboxBox" />
@@ -154,58 +157,58 @@ onBeforeUnmount(() => {
       <IncidentReport />
       <FindClosestPoint />
 
-			<div class="mapcontainer-quick-locations hide-if-mobile">
-				<button
-					class="mapcontainer-quick-locations-button"
-					@click="
-						mapStore.easeToLocation([
-							[121.536609, 25.044808],
-							12.5,
-							0,
-							0,
-						])
-					"
-				>
-					返回預設
-				</button>
-				<template v-if="!authStore.user?.user_id">
-					<button
-						v-for="(item, index) in savedLocations"
-						:key="`${item[4]}-${index}`"
-						class="mapcontainer-quick-locations-button"
-						@click="mapStore.easeToLocation(item)"
-					>
-						{{ item[4] }}
-					</button>
-				</template>
-				<div
-					v-for="(item, index) in mapStore.viewPoints"
-					:key="index"
-					class="mapcontainer-quick-locations-item"
-				>
-					<button
-						v-if="item.point_type === 'view'"
-						class="mapcontainer-quick-locations-button"
-						@click="mapStore.easeToLocation(item)"
-					>
-						{{ item.name }}
-					</button>
-					<div
-						v-if="authStore.user?.user_id"
-						class="mapcontainer-quick-locations-delete"
-						@click="mapStore.removeViewPoint(item)"
-					>
-						<span>delete</span>
-					</div>
-				</div>
-				<button
-					v-if="authStore.user?.user_id"
-					class="mapcontainer-quick-locations-button"
-					@click="dialogStore.showDialog('addViewPoint')"
-				>
-					新增位置
-				</button>
-			</div>
+      <div class="mapcontainer-quick-locations hide-if-mobile">
+        <button
+          class="mapcontainer-quick-locations-button"
+          @click="
+            mapStore.easeToLocation([
+              [121.536609, 25.044808],
+              12.5,
+              0,
+              0,
+            ])
+          "
+        >
+          返回預設
+        </button>
+        <template v-if="!authStore.user?.user_id">
+          <button
+            v-for="(item, index) in savedLocations"
+            :key="`${item[4]}-${index}`"
+            class="mapcontainer-quick-locations-button"
+            @click="mapStore.easeToLocation(item)"
+          >
+            {{ item[4] }}
+          </button>
+        </template>
+        <div
+          v-for="(item, index) in mapStore.viewPoints"
+          :key="index"
+          class="mapcontainer-quick-locations-item"
+        >
+          <button
+            v-if="item.point_type === 'view'"
+            class="mapcontainer-quick-locations-button"
+            @click="mapStore.easeToLocation(item)"
+          >
+            {{ item.name }}
+          </button>
+          <div
+            v-if="authStore.user?.user_id"
+            class="mapcontainer-quick-locations-delete"
+            @click="mapStore.removeViewPoint(item)"
+          >
+            <span>delete</span>
+          </div>
+        </div>
+        <button
+          v-if="authStore.user?.user_id"
+          class="mapcontainer-quick-locations-button"
+          @click="dialogStore.showDialog('addViewPoint')"
+        >
+          新增位置
+        </button>
+      </div>
     </div>
   </div>
   <AddViewPoint name="addViewPoint" />

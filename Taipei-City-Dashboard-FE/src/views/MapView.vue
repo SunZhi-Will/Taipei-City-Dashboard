@@ -112,7 +112,7 @@ onBeforeUnmount(() => {
     <button
       class="map-logo-btn"
       title="返回儀表板"
-			@click="returnToDashboard"
+      @click="returnToDashboard"
     >
       <img
         src="../assets/images/TUIC.svg"
@@ -122,14 +122,23 @@ onBeforeUnmount(() => {
 
     <!-- Navigation Capsule -->
     <nav class="map-nav-capsule hide-if-mobile">
-			<router-link :to="dashboardRoute" class="map-nav-link">
+      <router-link
+        :to="dashboardRoute"
+        class="map-nav-link"
+      >
         儀表板總覽
       </router-link>
-			<router-link :to="mapRoute" class="map-nav-link">
-				地圖交叉比對
-			</router-link>
-			<router-link :to="aiStudioRoute" class="map-nav-link">
-				AI Studio
+      <router-link
+        :to="mapRoute"
+        class="map-nav-link"
+      >
+        地圖交叉比對
+      </router-link>
+      <router-link
+        :to="aiStudioRoute"
+        class="map-nav-link"
+      >
+        AI Studio
       </router-link>
     </nav>
 
