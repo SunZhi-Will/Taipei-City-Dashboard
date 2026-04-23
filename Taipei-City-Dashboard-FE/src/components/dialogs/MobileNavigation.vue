@@ -64,11 +64,17 @@ onMounted(() => {
             <template v-if="authStore.token">
               <h1 @click="toggleCollapse(['favorites', 'personal'])">
                 私人儀表板
-                <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.favorites && collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+                <span
+                  class="mobilenavigation-chevron material-icons-round"
+                  aria-hidden="true"
+                >{{ collapsedStates.favorites && collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
               </h1>
               <h2 @click="toggleCollapse('favorites')">
                 我的最愛
-                <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.favorites ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+                <span
+                  class="mobilenavigation-chevron material-icons-round"
+                  aria-hidden="true"
+                >{{ collapsedStates.favorites ? "arrow_drop_down" : "arrow_drop_up" }}</span>
               </h2>
               <transition name="collapse">
                 <template v-if="!collapsedStates.favorites && contentStore.favorites?.index">
@@ -116,7 +122,10 @@ onMounted(() => {
             </template>
             <h1 @click="toggleCollapse(contentStore.cityManager.activeCities)">
               公共儀表板
-              <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ contentStore.cityManager.activeCities.every((city) => collapsedStates[city]) ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+              <span
+                class="mobilenavigation-chevron material-icons-round"
+                aria-hidden="true"
+              >{{ contentStore.cityManager.activeCities.every((city) => collapsedStates[city]) ? "arrow_drop_down" : "arrow_drop_up" }}</span>
             </h1>
             <template
               v-for="city in contentStore.cityManager.activeCities"
@@ -124,7 +133,10 @@ onMounted(() => {
             >
               <h2 @click="toggleCollapse(city)">
                 {{ `${contentStore.cityManager.getExpandedNameName(city)}` }}
-                <span class="mobilenavigation-chevron material-icons-round" aria-hidden="true">{{ collapsedStates[city] ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+                <span
+                  class="mobilenavigation-chevron material-icons-round"
+                  aria-hidden="true"
+                >{{ collapsedStates[city] ? "arrow_drop_down" : "arrow_drop_up" }}</span>
               </h2>
               <transition name="collapse">
                 <div

@@ -13,7 +13,7 @@ const props = defineProps({
 		default: '',
 	},
 });
-const emit = defineEmits(["copy", "explore"]);
+const emit = defineEmits(["copy", "explore", "open-map"]);
 const contentStore = useContentStore();
 
 const normalizedComponents = computed(() =>
@@ -28,8 +28,14 @@ const secondaryComponents = computed(() =>
 	normalizedComponents.value.filter((item) => item && item !== primaryComponent.value),
 );
 
+const hasMapConfig = (config) =>
+	Array.isArray(config?.map_config) && config.map_config.length > 0 && Boolean(config.map_config[0]);
+
 const isDashboardPreview = (comp) =>
-	comp?.category === "dashboard_component" && comp?.dashboardConfig;
+	comp?.category === "dashboard_component" && comp?.dashboardConfig && !hasMapConfig(comp.dashboardConfig);
+
+const isMapComponent = (comp) =>
+	comp?.category === "dashboard_component" && comp?.dashboardConfig && hasMapConfig(comp.dashboardConfig);
 
 const cityTags = (config) => {
 	if (!config?.city) return [];
@@ -40,55 +46,96 @@ const onExplore = (comp) => {
 	if (!comp?.name) return;
 	emit("explore", comp.name);
 };
+
+const onOpenMap = (comp) => {
+	if (!isMapComponent(comp)) return;
+	emit("open-map", comp);
+};
 </script>
 
 <template>
-	<div class="component-cards-area">
-		<div
-			v-if="primaryComponent"
-			:key="`${primaryComponent.id}-${primaryComponent.index || primaryComponent.name}`"
-			class="component-card"
-		>
-			<div v-if="isDashboardPreview(primaryComponent)" class="dashboard-focus-card">
-				<DashboardComponent
-					:config="primaryComponent.dashboardConfig"
-					mode="large"
-					:show-index="false"
-					:city-tag="cityTags(primaryComponent.dashboardConfig)"
-					:info-btn="false"
-					:add-btn="false"
-					:favorite-btn="false"
-					:footer="false"
-					:fullscreen-btn="false"
-				/>
-			</div>
+  <div class="component-cards-area">
+    <div
+      v-if="primaryComponent"
+      :key="`${primaryComponent.id}-${primaryComponent.index || primaryComponent.name}`"
+      class="component-card"
+    >
+      <div
+        v-if="isMapComponent(primaryComponent)"
+        class="map-focus-card"
+      >
+        <div class="map-focus-head">
+          <h4 class="component-name">
+            {{ primaryComponent.name }}
+          </h4>
+          <p class="map-focus-text">
+            此組件為地圖圖資，請使用地圖檢視查看完整圖層內容。
+          </p>
+        </div>
+        <button
+          type="button"
+          class="map-open-btn"
+          @click="onOpenMap(primaryComponent)"
+        >
+          開啟地圖
+        </button>
+      </div>
 
-			<div v-else class="generic-card generic-card-primary">
-				<div class="component-header">
-					<h4 class="component-name">{{ primaryComponent.name }}</h4>
-				</div>
-				<div class="component-body">
-					<p class="component-description">{{ primaryComponent.description }}</p>
-				</div>
-			</div>
-		</div>
+      <div
+        v-else-if="isDashboardPreview(primaryComponent)"
+        class="dashboard-focus-card"
+      >
+        <DashboardComponent
+          :config="primaryComponent.dashboardConfig"
+          mode="default"
+          :show-index="false"
+          :city-tag="cityTags(primaryComponent.dashboardConfig)"
+          :info-btn="false"
+          :add-btn="false"
+          :favorite-btn="false"
+          :footer="false"
+          :fullscreen-btn="false"
+        />
+      </div>
 
-		<div v-if="secondaryComponents.length > 0" class="secondary-section">
-			<p class="secondary-title">也可以延伸查看這些相關指標：</p>
-			<div class="secondary-links">
-				<button
-					v-for="comp in secondaryComponents"
-					:key="`${comp.id}-${comp.index || comp.name}`"
-					type="button"
-					class="secondary-link"
-					:title="`查看 ${comp.name}`"
-					@click="onExplore(comp)"
-				>
-					<span class="secondary-link-name">{{ comp.name }}</span>
-				</button>
-			</div>
-		</div>
-	</div>
+      <div
+        v-else
+        class="generic-card generic-card-primary"
+      >
+        <div class="component-header">
+          <h4 class="component-name">
+            {{ primaryComponent.name }}
+          </h4>
+        </div>
+        <div class="component-body">
+          <p class="component-description">
+            {{ primaryComponent.description }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="secondaryComponents.length > 0"
+      class="secondary-section"
+    >
+      <p class="secondary-title">
+        也可以延伸查看這些相關指標：
+      </p>
+      <div class="secondary-links">
+        <button
+          v-for="comp in secondaryComponents"
+          :key="`${comp.id}-${comp.index || comp.name}`"
+          type="button"
+          class="secondary-link"
+          :title="`查看 ${comp.name}`"
+          @click="onExplore(comp)"
+        >
+          <span class="secondary-link-name">{{ comp.name }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -109,6 +156,47 @@ const onExplore = (comp) => {
 	border: 1px solid rgba(255, 255, 255, 0.12);
 	border-radius: 10px;
 	padding: 8px;
+	max-height: 300px;
+	overflow: hidden;
+}
+
+.map-focus-card {
+	background: rgba(16, 185, 129, 0.08);
+	border: 1px solid rgba(52, 211, 153, 0.35);
+	border-radius: 10px;
+	padding: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.map-focus-head {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.map-focus-text {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: #bfe7d5;
+}
+
+.map-open-btn {
+	align-self: flex-start;
+	padding: 6px 12px;
+	border: 1px solid rgba(74, 222, 128, 0.5);
+	border-radius: 8px;
+	background: rgba(22, 163, 74, 0.25);
+	color: #e7ffe9;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.map-open-btn:hover {
+	background: rgba(22, 163, 74, 0.35);
 }
 
 .generic-card {

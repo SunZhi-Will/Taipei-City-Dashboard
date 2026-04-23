@@ -1,0 +1,762 @@
+﻿<!-- Developed By Taipei Urban Intelligence Center 2023-2024 -->
+
+<script setup>
+/* global gtag */
+import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import http from "../router/axios";
+import { useAuthStore } from "../store/authStore";
+import { useContentStore } from "../store/contentStore";
+import { useDialogStore } from "../store/dialogStore";
+import { useMapStore } from "../store/mapStore";
+import MapContainer from "../components/map/MapContainer.vue";
+import MapLayerSidebar from "../components/map/MapLayerSidebar.vue";
+import MoreInfo from "../components/dialogs/MoreInfo.vue";
+import ReportIssue from "../components/dialogs/ReportIssue.vue";
+
+const { VITE_APP_TITLE } = import.meta.env;
+
+const authStore = useAuthStore();
+const contentStore = useContentStore();
+const dialogStore = useDialogStore();
+const mapStore = useMapStore();
+const route = useRoute();
+const router = useRouter();
+
+const showNavMenu = ref(false);
+const islandCollapsed = ref(false);
+const privateCollapsed = ref(false);
+const publicCollapsed = ref(false);
+const favoriteCollapsed = ref(false);
+const personalCollapsed = ref(false);
+const selectedPublicCity = ref("taipei");
+
+const expandedDashboardMap = ref({});
+const loadingDashboardKey = ref("");
+const dashboardComponentsCache = ref({});
+const componentToggles = ref({});
+const activatedOpenComponentId = ref(null);
+
+const favoriteDashboard = computed(() => {
+	return contentStore.favorites?.index ? contentStore.favorites : null;
+});
+
+const personalDashboards = computed(() => {
+	return contentStore.personalDashboards.filter(
+		(item) => item.icon !== "favorite",
+	);
+});
+
+const publicCityOptions = computed(() => {
+	return ["taipei", "metrotaipei"].filter((city) =>
+		contentStore.cityManager.isCityEnabled(city),
+	);
+});
+
+const publicDashboards = computed(() => {
+	return contentStore.getDashboardsByCity(selectedPublicCity.value);
+});
+
+function buildDashboardKey(scope, index, city) {
+	return `${scope}:${city || "private"}:${index}`;
+}
+
+function componentKey(dashboard, city, component) {
+	return `${dashboard.index}:${city || component.city || "na"}:${component.id}`;
+}
+
+function hasMapConfig(component) {
+	return (
+		Array.isArray(component?.map_config) &&
+		component.map_config.length > 0 &&
+		Boolean(component.map_config[0])
+	);
+}
+
+function getUniquePrivateComponents(components) {
+	const sortedData = [...components].sort((a, b) => {
+		if (a.id !== b.id) return 0;
+		if (a.city === "taipei" && b.city !== "taipei") return -1;
+		if (a.city !== "taipei" && b.city === "taipei") return 1;
+		return 0;
+	});
+
+	return [...new Map(sortedData.map((item) => [item.id, item])).values()];
+}
+
+function getDashboardComponents(dashboard, city) {
+	const raw = dashboardComponentsCache.value[dashboard.index] || [];
+	if (city) {
+		return raw.filter((item) => item.city === city);
+	}
+	return getUniquePrivateComponents(raw);
+}
+
+async function ensureDashboardComponents(dashboardIndex) {
+	if (dashboardComponentsCache.value[dashboardIndex]) return;
+
+	loadingDashboardKey.value = dashboardIndex;
+	try {
+		const response = await http.get(`/dashboard/${dashboardIndex}`);
+		dashboardComponentsCache.value[dashboardIndex] = response.data.data || [];
+	} catch (error) {
+		console.error("Failed to load dashboard components", error);
+			dialogStore.showNotification("error", "讀取儀表板組件失敗");
+	} finally {
+		loadingDashboardKey.value = "";
+	}
+}
+
+async function toggleDashboardExpand(scope, dashboard, city) {
+	const key = buildDashboardKey(scope, dashboard.index, city);
+	const next = !expandedDashboardMap.value[key];
+	expandedDashboardMap.value[key] = next;
+	if (next) {
+		await ensureDashboardComponents(dashboard.index);
+	}
+}
+
+function switchDashboard(scope, dashboard, city) {
+	const nextQuery = { index: dashboard.index };
+	if (city) {
+		nextQuery.city = city;
+		selectedPublicCity.value = city;
+	}
+	router.push({ name: "mapview", query: nextQuery });
+
+	if (scope === "public") {
+		gtag("event", "popular_thematic_layer", {
+			dashboard_city: city,
+			layer_name: dashboard.name,
+			city_layer: `${city}-${dashboard.name}`,
+			time: Date.now(),
+		});
+	}
+}
+
+function handleComponentSyncToggle(checked, dashboard, city, component) {
+	const key = componentKey(dashboard, city, component);
+
+	if (!hasMapConfig(component)) {
+		if (checked) {
+			dialogStore.showNotification("info", "本組件沒有空間資料，不會渲染地圖");
+		}
+		componentToggles.value[key] = false;
+		return;
+	}
+
+	if (checked) {
+		mapStore.addToMapLayerList(component.map_config);
+	} else {
+		mapStore.clearByParamFilter(component.map_config);
+		mapStore.turnOffMapLayerVisibility(component.map_config);
+	}
+
+	componentToggles.value[key] = checked;
+}
+
+function isCurrentDashboard(dashboard, city) {
+	if (!dashboard) return false;
+	const sameIndex = contentStore.currentDashboard.index === dashboard.index;
+	if (city) {
+		return sameIndex && contentStore.currentDashboard.city === city;
+	}
+	return sameIndex && !contentStore.currentDashboard.city;
+}
+
+watch(
+	() => publicCityOptions.value,
+	(cities) => {
+		if (!cities.includes(selectedPublicCity.value) && cities.length > 0) {
+			selectedPublicCity.value = cities[0];
+		}
+	},
+	{ immediate: true },
+);
+
+watch(
+	() => route.query.city,
+	(city) => {
+		if (city && publicCityOptions.value.includes(city)) {
+			selectedPublicCity.value = city;
+		}
+	},
+	{ immediate: true },
+);
+
+watch(
+	() => [route.query.index, route.query.city],
+	([index, city]) => {
+		if (!index) return;
+
+		const scope = city ? "public" : "private";
+		const key = buildDashboardKey(scope, index, city);
+		expandedDashboardMap.value[key] = true;
+		ensureDashboardComponents(index);
+	},
+	{ immediate: true },
+);
+
+watch(
+	() => [
+		route.query.openComponentId,
+		contentStore.currentDashboard.index,
+		contentStore.currentDashboard.city,
+		contentStore.currentDashboard.components?.length || 0,
+	],
+	([openComponentId]) => {
+		if (!openComponentId) return;
+		if (activatedOpenComponentId.value === String(openComponentId)) return;
+
+		const component = (contentStore.currentDashboard.components || []).find(
+			(item) => String(item.id) === String(openComponentId),
+		);
+
+		if (!component || !hasMapConfig(component)) return;
+
+		mapStore.addToMapLayerList(component.map_config);
+		const key = componentKey(
+			{ index: contentStore.currentDashboard.index },
+			contentStore.currentDashboard.city,
+			component,
+		);
+		componentToggles.value[key] = true;
+		activatedOpenComponentId.value = String(openComponentId);
+	},
+	{ immediate: true },
+);
+
+onMounted(() => {
+	showNavMenu.value = false;
+});
+
+onBeforeUnmount(() => {
+	// Clean up map and all related resources
+	mapStore.destroyMapBox();
+	// Reset local state
+	expandedDashboardMap.value = {};
+	dashboardComponentsCache.value = {};
+	componentToggles.value = {};
+	activatedOpenComponentId.value = null;
+});
+</script>
+
+<template>
+  <div class="map-page">
+    <MapContainer class="map-page-map" />
+
+    <button
+      class="map-logo-btn"
+      title="返回儀表板"
+      @click="router.push('/dashboard')"
+    >
+      <img
+        src="../assets/images/TUIC.svg"
+        alt="TUIC logo"
+      >
+    </button>
+
+    <aside
+      class="map-island hide-if-mobile"
+      :class="{ 'map-island-collapsed': islandCollapsed }"
+    >
+      <div class="map-island-header">
+        <h2>圖層同步控制</h2>
+        <button @click="islandCollapsed = !islandCollapsed">
+          <span>{{ islandCollapsed ? 'expand_more' : 'expand_less' }}</span>
+        </button>
+      </div>
+
+      <div
+        v-if="!islandCollapsed"
+        class="map-island-content"
+      >
+        <section
+          v-if="authStore.token"
+          class="map-group"
+        >
+          <button
+            class="map-group-title"
+            @click="privateCollapsed = !privateCollapsed"
+          >
+            私人儀表板
+            <span>{{ privateCollapsed ? 'expand_more' : 'expand_less' }}</span>
+          </button>
+
+          <div v-if="!privateCollapsed">
+            <button
+              class="map-sub-title"
+              @click="favoriteCollapsed = !favoriteCollapsed"
+            >
+              我的最愛
+              <span>{{ favoriteCollapsed ? 'expand_more' : 'expand_less' }}</span>
+            </button>
+            <div
+              v-if="!favoriteCollapsed && favoriteDashboard"
+              class="map-dashboard-list"
+            >
+              <div class="map-dashboard-item">
+                <div class="map-dashboard-row">
+                  <button @click="switchDashboard('private', favoriteDashboard)">
+                    {{ favoriteDashboard.name }}
+                  </button>
+                  <button @click="toggleDashboardExpand('private', favoriteDashboard)">
+                    <span>unfold_more</span>
+                  </button>
+                </div>
+                <div
+                  v-if="expandedDashboardMap[buildDashboardKey('private', favoriteDashboard.index)]"
+                  class="map-component-list"
+                >
+                  <p v-if="loadingDashboardKey === favoriteDashboard.index">
+                    載入組件中...
+                  </p>
+                  <label
+                    v-for="component in getDashboardComponents(favoriteDashboard)"
+                    :key="component.id"
+                    class="map-component-item"
+                  >
+                    <input
+					  :checked="componentToggles[componentKey(favoriteDashboard, null, component)] || false"
+                      type="checkbox"
+                      @change="
+                        handleComponentSyncToggle(
+                          $event.target.checked,
+                          favoriteDashboard,
+                          null,
+                          component,
+                        )
+                      "
+                    >
+                    <span>{{ component.name }}</span>
+					<small v-if="!hasMapConfig(component)">無地圖</small>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <button
+              class="map-sub-title"
+              @click="personalCollapsed = !personalCollapsed"
+            >
+              個人儀表板
+              <span>{{ personalCollapsed ? 'expand_more' : 'expand_less' }}</span>
+            </button>
+            <div
+              v-if="!personalCollapsed"
+              class="map-dashboard-list"
+            >
+              <div
+                v-for="dashboard in personalDashboards"
+                :key="dashboard.index"
+                class="map-dashboard-item"
+              >
+                <div class="map-dashboard-row">
+                  <button @click="switchDashboard('private', dashboard)">
+                    {{ dashboard.name }}
+                  </button>
+                  <button @click="toggleDashboardExpand('private', dashboard)">
+                    <span>unfold_more</span>
+                  </button>
+                </div>
+                <div
+                  v-if="expandedDashboardMap[buildDashboardKey('private', dashboard.index)]"
+                  class="map-component-list"
+                >
+                  <p v-if="loadingDashboardKey === dashboard.index">
+                    載入組件中...
+                  </p>
+                  <label
+                    v-for="component in getDashboardComponents(dashboard)"
+                    :key="component.id"
+                    class="map-component-item"
+                  >
+                    <input
+					  :checked="componentToggles[componentKey(dashboard, null, component)] || false"
+                      type="checkbox"
+                      @change="
+                        handleComponentSyncToggle(
+                          $event.target.checked,
+                          dashboard,
+                          null,
+                          component,
+                        )
+                      "
+                    >
+                    <span>{{ component.name }}</span>
+					<small v-if="!hasMapConfig(component)">無地圖</small>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="map-group">
+          <button
+            class="map-group-title"
+            @click="publicCollapsed = !publicCollapsed"
+          >
+            公共儀表板
+            <span>{{ publicCollapsed ? 'expand_more' : 'expand_less' }}</span>
+          </button>
+
+          <div v-if="!publicCollapsed">
+            <select
+              v-model="selectedPublicCity"
+              class="map-city-select"
+            >
+              <option
+                v-for="city in publicCityOptions"
+                :key="city"
+                :value="city"
+              >
+                {{ contentStore.cityManager.getExpandedNameName(city) }}
+              </option>
+            </select>
+
+            <div class="map-dashboard-list">
+              <div
+                v-for="dashboard in publicDashboards"
+                :key="dashboard.index"
+                class="map-dashboard-item"
+              >
+                <div class="map-dashboard-row">
+                  <button
+                    @click="switchDashboard('public', dashboard, selectedPublicCity)"
+                  >
+                    {{ dashboard.name }}
+                  </button>
+                  <button
+                    @click="toggleDashboardExpand('public', dashboard, selectedPublicCity)"
+                  >
+                    <span>unfold_more</span>
+                  </button>
+                </div>
+                <div
+                  v-if="expandedDashboardMap[buildDashboardKey('public', dashboard.index, selectedPublicCity)]"
+                  class="map-component-list"
+                >
+                  <p v-if="loadingDashboardKey === dashboard.index">
+                    載入組件中...
+                  </p>
+                  <label
+                    v-for="component in getDashboardComponents(dashboard, selectedPublicCity)"
+                    :key="component.id"
+                    class="map-component-item"
+                  >
+                    <input
+					  :checked="componentToggles[componentKey(dashboard, selectedPublicCity, component)] || false"
+                      type="checkbox"
+                      @change="
+                        handleComponentSyncToggle(
+                          $event.target.checked,
+                          dashboard,
+                          selectedPublicCity,
+                          component,
+                        )
+                      "
+                    >
+                    <span>{{ component.name }}</span>
+					<small v-if="!hasMapConfig(component)">無地圖</small>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <MoreInfo />
+    <ReportIssue />
+  </div>
+</template>
+
+<style scoped lang="scss">
+.map-page {
+	position: relative;
+	width: 100vw;
+	height: calc(100vh);
+	height: calc(var(--vh) * 100);
+	overflow: hidden;
+	background: #0b0d0f;
+
+	&-map {
+		width: 100%;
+		height: 100%;
+	}
+
+	&-topbar {
+		position: absolute;
+		top: 12px;
+		left: 12px;
+		right: 12px;
+		height: 56px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 12px;
+		background: rgba(10, 13, 16, 0.74);
+		backdrop-filter: blur(8px);
+		border: 1px solid rgba(255, 255, 255, 0.14);
+		border-radius: 18px;
+		z-index: 30;
+	}
+
+	&-logo-btn {
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.12);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+
+		img {
+			width: 22px;
+			height: 22px;
+			filter: invert(1);
+		}
+	}
+
+	&-title {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-left: 10px;
+		margin-right: auto;
+
+		p {
+			font-size: 0.65rem;
+			color: #b7bcc3;
+		}
+
+		h1 {
+			font-size: 0.95rem;
+			font-weight: 600;
+		}
+	}
+
+	&-nav-wrap {
+		position: relative;
+	}
+
+	&-nav-toggle {
+		width: 38px;
+		height: 38px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.12);
+		border: none;
+
+		span {
+			font-family: var(--font-icon);
+		}
+	}
+
+	&-nav-menu {
+		position: absolute;
+		top: 44px;
+		right: 0;
+		width: 210px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 8px;
+		background: rgba(16, 20, 24, 0.96);
+		border: 1px solid rgba(255, 255, 255, 0.14);
+		border-radius: 10px;
+
+		a {
+			padding: 8px;
+			border-radius: 8px;
+			color: #f2f4f8;
+		}
+
+		a:hover {
+			background: rgba(255, 255, 255, 0.1);
+		}
+	}
+}
+
+.map-island {
+	position: absolute;
+	top: 68px;
+	left: 12px;
+	width: 260px;
+	max-height: calc(100% - 80px);
+	display: flex;
+	flex-direction: column;
+	background: rgba(12, 16, 19, 0.82);
+	backdrop-filter: blur(12px);
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 22px;
+	z-index: 20;
+	overflow: hidden;
+	transition: width 0.25s ease, opacity 0.2s ease;
+
+	&-collapsed {
+		width: 54px;
+
+		.map-island-header h2 {
+			display: none;
+		}
+	}
+}
+
+.map-logo-btn {
+	position: absolute;
+	top: 12px;
+	left: 12px;
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	background: rgba(12, 16, 19, 0.82);
+	backdrop-filter: blur(12px);
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 25;
+
+	img {
+		width: 24px;
+		height: 24px;
+		filter: invert(1);
+	}
+
+	&:hover {
+		background: rgba(12, 16, 19, 0.95);
+		border-color: rgba(255, 255, 255, 0.24);
+	}
+
+	&-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 10px 12px;
+		background: rgba(255, 255, 255, 0.06);
+
+		h2 {
+			font-size: 0.86rem;
+			font-weight: 600;
+		}
+
+		button span {
+			font-family: var(--font-icon);
+		}
+	}
+
+	&-content {
+		overflow-y: auto;
+		padding: 6px;
+		display: grid;
+		gap: 6px;
+	}
+}
+
+.map-group {
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 14px;
+	padding: 6px;
+	background: rgba(0, 0, 0, 0.2);
+}
+
+.map-group-title,
+.map-sub-title,
+.map-dashboard-row button {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 8px;
+	border-radius: 10px;
+	text-align: left;
+}
+
+.map-group-title,
+.map-sub-title {
+	font-weight: 600;
+	background: rgba(255, 255, 255, 0.08);
+
+	span {
+		font-family: var(--font-icon);
+	}
+}
+
+.map-sub-title {
+	margin-top: 4px;
+	font-size: 0.75rem;
+}
+
+.map-city-select {
+	width: 100%;
+	margin-top: 8px;
+	margin-bottom: 8px;
+	font-size: 0.8rem;
+}
+
+.map-dashboard-list {
+	display: grid;
+	gap: 4px;
+}
+
+.map-dashboard-item {
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.map-dashboard-row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	background: rgba(255, 255, 255, 0.06);
+
+	button:last-child {
+		width: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+
+		span {
+			font-family: var(--font-icon);
+		}
+	}
+}
+
+.map-component-list {
+	display: grid;
+	gap: 3px;
+	padding: 4px;
+	max-height: 280px;
+	overflow-y: auto;
+
+	p {
+		font-size: 0.75rem;
+		color: #b9bec7;
+		padding: 4px;
+	}
+}
+
+.map-component-item {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 4px;
+	border-radius: 8px;
+
+	span {
+		font-size: 0.72rem;
+		line-height: 1.2;
+	}
+
+	small {
+		color: #ffb48f;
+		font-size: 0.68rem;
+	}
+}
+</style>
+

@@ -2,7 +2,7 @@
 
 <script setup>
 /* global gtag */
-import { onMounted, ref, computed, watch } from "vue";
+import { onMounted, onBeforeUnmount, ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useAuthStore } from "../../store/authStore";
 import { useContentStore } from "../../store/contentStore";
@@ -20,6 +20,8 @@ const mapStore = useMapStore();
 const dialogStore = useDialogStore();
 const contentStore = useContentStore();
 const route = useRoute();
+
+defineOptions({ inheritAttrs: false });
 
 const districtLayer = ref(false);
 const villageLayer = ref(false);
@@ -80,10 +82,14 @@ onMounted(() => {
 		? mapStore.updateMapViewForCity(route.query.city)
 		: mapStore.updateMapViewForCity('default');
 });
+
+onBeforeUnmount(() => {
+	mapStore.destroyMapBox();
+});
 </script>
 
 <template>
-  <div class="mapcontainer">
+  <div class="mapcontainer" v-bind="$attrs">
     <div class="mapcontainer-map">
       <!-- #mapboxBox needs to be empty to ensure Mapbox performance -->
       <div id="mapboxBox" />
@@ -147,55 +153,59 @@ onMounted(() => {
       <MobileLayers :key="contentStore.currentDashboard.index" />
       <IncidentReport />
       <FindClosestPoint />
-    </div>
 
-    <div class="mapcontainer-controls hide-if-mobile">
-      <button
-        @click="
-          mapStore.easeToLocation([
-            [121.536609, 25.044808],
-            12.5,
-            0,
-            0,
-          ])
-        "
-      >
-        返回預設
-      </button>
-      <template v-if="!authStore.user?.user_id">
-        <div
-          v-for="(item, index) in savedLocations"
-          :key="`${item[4]}-${index}`"
-        >
-          <button @click="mapStore.easeToLocation(item)">
-            {{ item[4] }}
-          </button>
-        </div>
-      </template>
-      <div
-        v-for="(item, index) in mapStore.viewPoints"
-        :key="index"
-      >
-        <button
-          v-if="item.point_type === 'view'"
-          @click="mapStore.easeToLocation(item)"
-        >
-          {{ item["name"] }}
-        </button>
-        <div
-          v-if="authStore.user?.user_id"
-          class="mapcontainer-controls-delete"
-          @click="mapStore.removeViewPoint(item)"
-        >
-          <span>delete</span>
-        </div>
-      </div>
-      <button
-        v-if="authStore.user?.user_id"
-        @click="dialogStore.showDialog('addViewPoint')"
-      >
-        新增
-      </button>
+			<div class="mapcontainer-quick-locations hide-if-mobile">
+				<button
+					class="mapcontainer-quick-locations-button"
+					@click="
+						mapStore.easeToLocation([
+							[121.536609, 25.044808],
+							12.5,
+							0,
+							0,
+						])
+					"
+				>
+					返回預設
+				</button>
+				<template v-if="!authStore.user?.user_id">
+					<button
+						v-for="(item, index) in savedLocations"
+						:key="`${item[4]}-${index}`"
+						class="mapcontainer-quick-locations-button"
+						@click="mapStore.easeToLocation(item)"
+					>
+						{{ item[4] }}
+					</button>
+				</template>
+				<div
+					v-for="(item, index) in mapStore.viewPoints"
+					:key="index"
+					class="mapcontainer-quick-locations-item"
+				>
+					<button
+						v-if="item.point_type === 'view'"
+						class="mapcontainer-quick-locations-button"
+						@click="mapStore.easeToLocation(item)"
+					>
+						{{ item.name }}
+					</button>
+					<div
+						v-if="authStore.user?.user_id"
+						class="mapcontainer-quick-locations-delete"
+						@click="mapStore.removeViewPoint(item)"
+					>
+						<span>delete</span>
+					</div>
+				</div>
+				<button
+					v-if="authStore.user?.user_id"
+					class="mapcontainer-quick-locations-button"
+					@click="dialogStore.showDialog('addViewPoint')"
+				>
+					新增位置
+				</button>
+			</div>
     </div>
   </div>
   <AddViewPoint name="addViewPoint" />
@@ -209,11 +219,8 @@ onMounted(() => {
 	flex: 1;
 
 	&-map {
-		height: calc(100% - 32px);
-
-		@media (max-width: 1000px) {
-			height: 100%;
-		}
+		width: 100%;
+		height: 100%;
 	}
 
 	&-controls {
@@ -358,6 +365,76 @@ onMounted(() => {
 			&:hover {
 				background-color: var(--color-highlight);
 			}
+		}
+	}
+}
+
+.mapcontainer-quick-locations {
+	position: absolute;
+	bottom: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px;
+	z-index: 20;
+	max-width: min(90vw, 860px);
+
+	&-button {
+		min-height: 2rem;
+		padding: 6px 10px;
+		border-radius: 999px;
+		background: rgba(12, 16, 19, 0.82);
+		backdrop-filter: blur(12px);
+		border: 1px solid rgba(255, 255, 255, 0.16);
+		color: #f2f4f8;
+		font-size: 0.78rem;
+		line-height: 1.2;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		transition: background 0.2s ease, border-color 0.2s ease;
+		text-align: left;
+		white-space: nowrap;
+
+		&:hover {
+			background: rgba(12, 16, 19, 0.95);
+			border-color: rgba(255, 255, 255, 0.24);
+		}
+	}
+
+	&-item {
+		position: relative;
+
+		.mapcontainer-quick-locations-delete {
+			position: absolute;
+			top: -8px;
+			right: -8px;
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
+			background: rgba(255, 65, 44, 0.9);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			cursor: pointer;
+			opacity: 0;
+			transition: opacity 0.2s;
+			z-index: 10;
+
+			span {
+				color: white;
+				font-family: var(--font-icon);
+				font-size: 0.7rem;
+			}
+		}
+
+		&:hover .mapcontainer-quick-locations-delete {
+			opacity: 1;
 		}
 	}
 }

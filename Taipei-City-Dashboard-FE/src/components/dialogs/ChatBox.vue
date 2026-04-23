@@ -1,9 +1,13 @@
 <script setup>
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { ref, watch, nextTick, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
-import SendIcon from "../icons/SendIcon.vue";
 import BotLogo from "../icons/BotLogo.vue";
 import ChatResultComponents from "./ChatResultComponents.vue";
+import ChatComposer from "./chat/ChatComposer.vue";
+import ChatHeader from "./chat/ChatHeader.vue";
+import ChatStickyNotice from "./chat/ChatStickyNotice.vue";
+import SuggestedTagsBar from "./chat/SuggestedTagsBar.vue";
 
 import { useChatStore } from "../../store/chatStore";
 import { useContentStore } from "../../store/contentStore";
@@ -22,6 +26,7 @@ const emit = defineEmits(["close", "expand"]);
 const chatStore = useChatStore();
 const contentStore = useContentStore();
 const authStore = useAuthStore();
+const router = useRouter();
 const { addChatData, addQueryData, saveChatLog, clearChatHistory } = chatStore;
 const { createDashboard } = contentStore;
 const { chatData, isResponding } = storeToRefs(chatStore);
@@ -30,11 +35,10 @@ const { user } = storeToRefs(authStore);
 
 const userMessage = ref("");
 const chatAreaRef = ref(null);
-const chatInputRef = ref(null);
 const isStickyOpen = ref(false);
 const isExpanded = ref(false);
 const dashboardCreationLoading = ref(false);
-const MAX_INPUT_HEIGHT = 120;
+const tagsRefreshKey = ref(0);
 
 // === 建議 Tags ===
 const DEFAULT_TAGS = [
@@ -42,31 +46,11 @@ const DEFAULT_TAGS = [
 ];
 
 const suggestedTags = ref([...DEFAULT_TAGS]);
-const tagsScrollRef = ref(null);
-const showScrollLeft = ref(false);
-const showScrollRight = ref(false);
 
 // 點擊 tag 直接送出
 const clickTag = async (tag) => {
 	if (isResponding.value) return;
 	await addQueryData({ role: "user", content: tag });
-	await nextTick();
-	resizeInput();
-};
-
-const updateTagScrollButtons = () => {
-	const el = tagsScrollRef.value;
-	if (!el) return;
-	showScrollLeft.value = el.scrollLeft > 10;
-	showScrollRight.value = el.scrollLeft < el.scrollWidth - el.clientWidth - 10;
-};
-
-const scrollTagsLeft = () => tagsScrollRef.value?.scrollBy({ left: -200, behavior: "smooth" });
-const scrollTagsRight = () => tagsScrollRef.value?.scrollBy({ left: 200, behavior: "smooth" });
-
-const refreshTagButtons = () => {
-	nextTick(() => updateTagScrollButtons());
-	setTimeout(() => updateTagScrollButtons(), 320);
 };
 
 // bot 回覆後，根據內容動態更新相關 tags
@@ -96,29 +80,6 @@ watch(
 	},
 	{ deep: true },
 );
-
-// tags 更新後重算捲動按鈕狀態
-watch(suggestedTags, () => nextTick(() => updateTagScrollButtons()));
-
-const resizeInput = () => {
-	const input = chatInputRef.value;
-	if (!input) return;
-	input.style.height = "auto";
-	const nextHeight = Math.min(input.scrollHeight, MAX_INPUT_HEIGHT);
-	input.style.height = `${nextHeight}px`;
-};
-
-const onInputChange = () => {
-	resizeInput();
-};
-
-const onInputKeydown = (event) => {
-	if (event.key === "Enter" && !event.shiftKey) {
-		event.preventDefault();
-		sendBtnHandler(userMessage.value);
-	}
-};
-
 const qaBtnHandler = async (text, relations) => {
 	if (text === "建立儀表板") {
 		if (dashboardCreationLoading.value === true) return;
@@ -133,7 +94,8 @@ const qaBtnHandler = async (text, relations) => {
 			dashboardCreationLoading.value = false;
 			return;
 		}
-		const components = Array.from(new Set(relations.map((r) => r.id))).map(
+		const safeRelations = Array.isArray(relations) ? relations : [];
+		const components = Array.from(new Set(safeRelations.map((r) => r.id))).map(
 			(id) => ({ id }),
 		);
 
@@ -165,12 +127,6 @@ const sendBtnHandler = async () => {
 		content: normalizedText,
 	});
 	userMessage.value = "";
-	await nextTick();
-	resizeInput();
-};
-
-const toggleSticky = () => {
-	isStickyOpen.value = !isStickyOpen.value;
 };
 
 const closeWidget = () => {
@@ -180,11 +136,7 @@ const closeWidget = () => {
 const toggleExpand = () => {
 	isExpanded.value = !isExpanded.value;
 	emit("expand", isExpanded.value);
-	refreshTagButtons();
-};
-
-const onWindowResize = () => {
-	refreshTagButtons();
+	tagsRefreshKey.value += 1;
 };
 
 const clearChat = () => {
@@ -205,8 +157,24 @@ const copyToClipboard = async (text) => {
 const handleExploreIndicator = async (indicatorName) => {
 	if (isResponding.value || !indicatorName) return;
 	await addQueryData({ role: "user", content: indicatorName });
-	await nextTick();
-	resizeInput();
+};
+
+const handleOpenMap = async (component) => {
+	const mapConfig = component?.dashboardConfig?.map_config;
+	if (!Array.isArray(mapConfig) || mapConfig.length === 0 || !mapConfig[0]) return;
+
+	const city = component?.dashboardConfig?.city || contentStore.currentDashboard?.city || "taipei";
+	const index = contentStore.currentDashboard?.index || "map-layers";
+	const openComponentId = component?.dashboardConfig?.id;
+
+	await router.push({
+		name: "mapview",
+		query: {
+			index,
+			city,
+			...(openComponentId ? { openComponentId: String(openComponentId) } : {}),
+		},
+	});
 };
 
 
@@ -220,12 +188,6 @@ const scrollToBottom = async () => {
 
 onMounted(() => {
 	scrollToBottom();
-	nextTick(() => updateTagScrollButtons());
-	window.addEventListener("resize", onWindowResize);
-});
-
-onBeforeUnmount(() => {
-	window.removeEventListener("resize", onWindowResize);
 });
 
 watch(
@@ -238,95 +200,45 @@ watch(
 </script>
 
 <template>
-	<div
-		id="chat-widget-panel"
-		class="chat-widget"
-		role="dialog"
-		aria-label="臺北城市儀表板小幫手"
-		tabindex="-1"
-	>
-		<div class="header">
-			<h3>臺北城市儀表板小幫手</h3>
-			<div class="header-actions">
-				<button
-					type="button"
-					class="action-btn clear-btn"
-					title="清除歷史紀錄"
-					aria-label="清除聊天歷史"
-					@click="clearChat"
-				>
-					<svg viewBox="0 0 16 16" aria-hidden="true">
-						<path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5M8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5m3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0" />
-					</svg>
-				</button>
-				<button
-					type="button"
-					class="action-btn expand-btn"
-					title="展開為全屏"
-					aria-label="展開聊天視窗為全屏"
-					@click="toggleExpand"
-				>
-					<svg viewBox="0 0 16 16" aria-hidden="true">
-						<path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1h-4zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z" />
-					</svg>
-        </button>
-			<button
-				v-if="props.showCloseButton"
-				class="action-btn close-btn"
-				type="button"
-				aria-label="關閉聊天視窗"
-				@click="closeWidget"
-			>
-				<svg viewBox="0 0 16 16" aria-hidden="true">
-					<path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z" />
-				</svg>
-			</button>
-      </div>
-    </div>
+  <div
+    id="chat-widget-panel"
+    class="chat-widget"
+    role="dialog"
+    aria-label="臺北城市儀表板小幫手"
+    tabindex="-1"
+  >
+    <ChatHeader
+      :show-close-button="props.showCloseButton"
+      @clear="clearChat"
+      @expand="toggleExpand"
+      @close="closeWidget"
+    />
 
     <!-- 聊天區 -->
     <div
       ref="chatAreaRef"
       class="chat-area scrollbar-custom"
-			role="log"
-			aria-live="polite"
-			aria-label="對話紀錄"
+      role="log"
+      aria-live="polite"
+      aria-label="對話紀錄"
     >
-      <!-- 置頂訊息 -->
-      <div class="chat-message sticky-message">
+      <ChatStickyNotice v-model="isStickyOpen" />
+      <div
+        v-if="chatData.length === 0 && !isResponding"
+        class="empty-state"
+      >
         <div
-          class="sticky-header"
-          @click="toggleSticky"
+          class="empty-icon"
+          aria-hidden="true"
         >
-          <span>置頂公告：小幫手使用須知</span>
-					<button
-						class="toggle-btn"
-						type="button"
-						:aria-expanded="isStickyOpen"
-						aria-label="切換置頂公告內容"
-					>
-            {{ isStickyOpen ? "-" : "+" }}
-          </button>
+          <svg viewBox="0 0 16 16">
+            <path d="M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2" />
+          </svg>
         </div>
-        <div
-          v-show="isStickyOpen"
-          class="sticky-body"
-        >
-					<span>小幫手目前支援 AI 對話與組件推薦兩種模式。預設會先嘗試 AI 對話，若服務繁忙會自動切換為組件推薦，協助您不中斷查詢。<br><br>
-						若涉及即時資料或專業判讀，建議您搭配圖表與官方資料來源交叉確認。</span>
-        </div>
+        <p class="empty-text">
+          您好！請輸入想查詢的城市議題，我會協助推薦相關組件與說明。
+        </p>
       </div>
-			<div
-				v-if="chatData.length === 0 && !isResponding"
-				class="empty-state"
-			>
-				<div class="empty-icon" aria-hidden="true">
-					<svg viewBox="0 0 16 16">
-						<path d="M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2" />
-					</svg>
-				</div>
-				<p class="empty-text">您好！請輸入想查詢的城市議題，我會協助推薦相關組件與說明。</p>
-			</div>
       <div
         v-for="chat in chatData"
         :key="chat.id"
@@ -340,16 +252,17 @@ watch(
           <div class="content">
             <div
               v-if="chat.content"
-							class="message--plain"
+              class="message--plain"
             >
               <p>{{ chat.content }}</p>
             </div>
-						<ChatResultComponents
-							v-if="chat.components && chat.components.length > 0"
-							:components="chat.components"
-							@copy="copyToClipboard"
-							@explore="handleExploreIndicator"
-						/>
+            <ChatResultComponents
+              v-if="chat.components && chat.components.length > 0"
+              :components="chat.components"
+              @copy="copyToClipboard"
+              @explore="handleExploreIndicator"
+              @open-map="handleOpenMap"
+            />
 
             <!-- 儀表板卡片區 -->
             <div
@@ -362,7 +275,9 @@ watch(
                 class="dashboard-card"
               >
                 <div class="card-content">
-                  <h4 class="card-title">{{ item.name }}</h4>
+                  <h4 class="card-title">
+                    {{ item.name }}
+                  </h4>
                   <div class="card-meta">
                     <span class="card-city">
                       {{ item.city === "taipei" ? "🏙️ 臺北" : "🌆 雙北" }}
@@ -401,100 +316,44 @@ watch(
           </div>
         </div>
       </div>
-			<div
-				v-if="isResponding"
-				class="responding-state"
-			>
-				<div class="avatar">
-					<BotLogo />
-				</div>
-				<div class="typing-dots" aria-label="小幫手回應中">
-					<span class="typing-dot" />
-					<span class="typing-dot" />
-					<span class="typing-dot" />
-				</div>
-			</div>
+      <div
+        v-if="isResponding"
+        class="responding-state"
+      >
+        <div class="avatar">
+          <BotLogo />
+        </div>
+        <div
+          class="typing-dots"
+          aria-label="小幫手回應中"
+        >
+          <span class="typing-dot" />
+          <span class="typing-dot" />
+          <span class="typing-dot" />
+        </div>
+      </div>
     </div>
 
-			<!-- 建議 Tags -->
-			<div
-				v-if="!isResponding && suggestedTags.length > 0"
-				class="tags-area"
-				role="list"
-				aria-label="建議查詢主題"
-			>
-				<button
-					class="tag-scroll-btn tag-scroll-left"
-					type="button"
-					aria-hidden="true"
-					:style="{ opacity: showScrollLeft ? '1' : '0', pointerEvents: showScrollLeft ? 'auto' : 'none' }"
-					@click="scrollTagsLeft"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-						<path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
-					</svg>
-				</button>
-				<div
-					ref="tagsScrollRef"
-					class="tags-scroll scrollbar-x-hide"
-					@scroll="updateTagScrollButtons"
-				>
-					<button
-						v-for="tag in suggestedTags"
-						:key="tag"
-						class="tag-chip"
-						type="button"
-						role="listitem"
-						@click="clickTag(tag)"
-					>
-						{{ tag }}
-					</button>
-				</div>
-				<button
-					class="tag-scroll-btn tag-scroll-right"
-					type="button"
-					aria-hidden="true"
-					:style="{ opacity: showScrollRight ? '1' : '0', pointerEvents: showScrollRight ? 'auto' : 'none' }"
-					@click="scrollTagsRight"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-						<path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
-					</svg>
-				</button>
-			</div>
-			<div class="input-shell">
-				<textarea
-					ref="chatInputRef"
-					v-model="userMessage"
-					class="chat-input"
-					rows="1"
-					:placeholder="isResponding ? '小幫手回應中...' : '輸入訊息（Shift+Enter 換行）...'"
-					aria-label="輸入聊天訊息"
-					:disabled="isResponding"
-					@input="onInputChange"
-					@keydown="onInputKeydown"
-				/>
-				<button
-					type="button"
-					class="send-btn"
-					:disabled="isResponding || !userMessage.trim()"
-					:aria-label="isResponding ? '訊息發送中' : '發送訊息'"
-					@click="sendBtnHandler"
-				>
-					<SendIcon />
-				</button>
-			</div>
-	</div>
+    <SuggestedTagsBar
+      v-if="!isResponding && suggestedTags.length > 0"
+      :tags="suggestedTags"
+      :refresh-key="tagsRefreshKey"
+      @select="clickTag"
+    />
+    <ChatComposer
+      v-model="userMessage"
+      :is-responding="isResponding"
+      @send="sendBtnHandler"
+    />
+  </div>
 </template>
 
 <style lang="scss" scoped>
 /* === 色彩系統（對齊 AIChatHub Widget） === */
 $bg-dark: #18191d;
-$panel-bg: #0f1013;
 $card-bg: #252a2f;
 $border-color: #353a41;
 $border-hover: rgba(255, 255, 255, 0.2);
-$input-bg: #252a2f;
 $white: #ffffff;
 $text-primary: #f4f4f5;
 $text-secondary: #d0d0d8;
@@ -504,16 +363,11 @@ $scroll-thumb-hover: #505560;
 /* === 圓角系統 === */
 $radius-8: 8px;
 $radius-10: 10px;
-$radius-15: 15px;
-$radius-20: 20px;
 
 /* === 動畫標準 === */
-$transition-standard: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
 /* === 尺寸標準 === */
-$btn-size: 40px;
-$btn-size-sm: 36px;
 
 /* === Scrollbar === */
 .scrollbar-x-hide {
@@ -564,80 +418,6 @@ $btn-size-sm: 36px;
 		overflow: visible;
 	}
 
-	.header {
-		height: 3.5rem;
-		padding: 0 1rem;
-		background: $panel-bg;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-shrink: 0;
-
-		h3 {
-			font-size: 0.875rem;
-			font-weight: 600;
-			color: $white;
-			margin: 0;
-		}
-
-		.header-actions {
-			display: flex;
-			align-items: center;
-			gap: 0.5rem;
-		}
-
-		.action-btn {
-			width: $btn-size-sm;
-			height: $btn-size-sm;
-			border-radius: $radius-8;
-			border: none;
-			background: transparent;
-			color: $text-primary;
-			font-size: 16px;
-			line-height: 1;
-			cursor: pointer;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			transition: $transition-fast;
-
-			&:hover {
-				background: rgba($white, 0.16);
-				color: $text-primary;
-				transform: scale(1.05);
-			}
-
-			&:active {
-				transform: scale(0.95);
-			}
-		}
-
-		.clear-btn {
-			svg {
-				width: 16px;
-				height: 16px;
-				fill: currentColor;
-			}
-		}
-
-		.close-btn {
-			svg {
-				width: 16px;
-				height: 16px;
-				fill: currentColor;
-			}
-		}
-
-		.expand-btn {
-			svg {
-				width: 16px;
-				height: 16px;
-				fill: currentColor;
-			}
-		}
-	}
-
 	.chat-area {
 		flex: 1;
 		min-height: 0;
@@ -646,13 +426,6 @@ $btn-size-sm: 36px;
 		overflow-x: hidden;
 		background: $bg-dark;
 		color: $white;
-
-		.chat-message {
-			padding: 0;
-			margin: 0;
-			border-radius: 0;
-			background: transparent;
-		}
 
 		.empty-state {
 			display: flex;
@@ -685,76 +458,6 @@ $btn-size-sm: 36px;
 			line-height: 1.5;
 			color: $text-muted;
 			margin: 0;
-		}
-
-		// 置頂訊息
-		.sticky-message {
-			margin: 0 0 0.75rem;
-			border: 1px solid $border-color;
-			border-radius: $radius-10;
-			background: $card-bg;
-			position: sticky;
-			top: 0;
-			z-index: 10;
-			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-			transition: $transition-fast;
-
-			.sticky-header {
-				display: flex;
-				font-weight: 600;
-				font-size: 13px;
-				color: $text-primary;
-				justify-content: space-between;
-				align-items: center;
-				cursor: pointer;
-				padding: 8px 12px;
-				background: #1f2328;
-				border-bottom: 1px solid $border-color;
-				transition: $transition-fast;
-
-				span {
-					color: $text-primary;
-				}
-
-				&:hover {
-					background: rgba($white, 0.05);
-				}
-			}
-
-			.sticky-body {
-				padding: 10px 12px;
-				font-weight: 400;
-				font-size: 14px;
-				color: $text-secondary;
-				line-height: 1.65;
-				background: $card-bg;
-				animation: slideDown 0.3s ease-out;
-
-				span,
-				p {
-					color: $text-secondary;
-				}
-			}
-
-			.toggle-btn {
-				background: none;
-				border: none;
-				font-size: 14px;
-				cursor: pointer;
-				color: #808090;
-				width: 24px;
-				height: 24px;
-				border-radius: $radius-8;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				transition: $transition-fast;
-
-				&:hover {
-					background: rgba($white, 0.08);
-					color: $text-primary;
-				}
-			}
 		}
 
 		.message {
@@ -980,177 +683,6 @@ $btn-size-sm: 36px;
 		}
 	}
 
-	.tags-area {
-		position: absolute;
-		left: 0.75rem;
-		right: 0.75rem;
-		bottom: 4.25rem;
-		width: auto;
-		animation: fadeIn 0.25s ease-out;
-		z-index: 25;
-		background: transparent;
-
-		.tags-scroll {
-			display: flex;
-			gap: 0.5rem;
-			overflow-x: auto;
-			overflow-y: hidden;
-			padding: 0.25rem 1.75rem;
-			scroll-behavior: smooth;
-		}
-
-		.tag-chip {
-			flex-shrink: 0;
-			padding: 0.375rem 0.75rem;
-			border-radius: 1rem;
-			border: 2px solid rgba($white, 0.28);
-			background: #2b3037;
-			color: $text-secondary;
-			font-size: 0.8125rem;
-			font-family: inherit;
-			white-space: nowrap;
-			cursor: pointer;
-			transition: $transition-fast;
-
-			&:hover {
-				background: #363d47;
-				border-color: rgba($white, 0.35);
-				color: $text-primary;
-			}
-
-			&:active {
-				transform: scale(0.98);
-			}
-		}
-
-		.tag-scroll-btn {
-			position: absolute;
-			top: 50%;
-			transform: translateY(-50%);
-			width: 28px;
-			height: 28px;
-			background: #2a2f36;
-			border: 1px solid #4a515a;
-			border-radius: 50%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			cursor: pointer;
-			transition: $transition-fast;
-			z-index: 10;
-			color: #ffffff;
-			box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-
-			&:hover {
-				background: #363d47;
-				border-color: #5b6572;
-				transform: translateY(-50%) scale(1.05);
-			}
-		}
-
-		.tag-scroll-left { left: 0; }
-		.tag-scroll-right { right: 0; }
-	}
-
-	.input-shell {
-		position: absolute;
-		left: 0.75rem;
-		right: 0.75rem;
-		bottom: 0.75rem;
-		display: flex;
-		align-items: flex-end;
-		width: auto;
-		min-height: 52px;
-		box-sizing: border-box;
-		background: transparent;
-		padding: 0;
-		border: none;
-		overflow: visible;
-		z-index: 30;
-	}
-
-	.chat-input {
-			width: 100%;
-			min-width: 0;
-			max-width: none;
-			box-sizing: border-box;
-			min-height: 52px;
-			max-height: 200px;
-			resize: none;
-			overflow-y: auto;
-			border: 1px solid $border-color;
-			border-radius: 1.75rem;
-			padding: 14px 64px 14px 24px;
-			outline: none;
-			color: $text-primary;
-			background: $input-bg;
-			font-size: 14px;
-			line-height: 24px;
-			font-family: inherit;
-			box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.12);
-			transition: $transition-standard;
-
-			&::placeholder {
-				color: #707078;
-			}
-
-			&:hover:not(:focus) {
-				border-color: $border-hover;
-			}
-
-			&:focus {
-				border-color: #5a6068;
-				box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
-			}
-	}
-
-	.send-btn {
-			position: absolute;
-			right: 4px;
-			top: 50%;
-			bottom: auto;
-			width: $btn-size;
-			height: $btn-size;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			background: $white;
-			border: none;
-			border-radius: 999px;
-			cursor: pointer;
-			box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.08);
-			transition: $transition-standard;
-			transform: translateY(-50%);
-
-			:deep(svg) {
-				width: 28px;
-				height: 28px;
-			}
-
-			:deep(svg circle) {
-				display: none;
-			}
-
-			:deep(svg path) {
-				fill: #1a1a1a;
-			}
-
-			&:disabled {
-				opacity: 0.5;
-				cursor: not-allowed;
-			}
-
-			&:hover:not(:disabled) {
-				background: #f5f5f5;
-				transform: translateY(-50%) scale(1.05);
-				box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 10px 10px -5px rgba(0, 0, 0, 0.06);
-			}
-
-			&:active:not(:disabled) {
-				transform: translateY(-50%) scale(0.95);
-			}
-	}
-
 }
 
 @media (max-width: 768px) {
@@ -1159,28 +691,6 @@ $btn-size-sm: 36px;
 
 		.chat-area {
 			padding-bottom: 9.75rem;
-		}
-
-		.tags-area {
-			left: 0.5rem;
-			right: 0.5rem;
-			bottom: 4.125rem;
-		}
-
-		.input-shell {
-			left: 0.5rem;
-			right: 0.5rem;
-			bottom: 0.5rem;
-		}
-
-		.chat-input {
-			padding: 12px 56px 12px 16px;
-		}
-
-		.send-btn {
-			width: 40px;
-			height: 40px;
-			right: 4px;
 		}
   }
 }
@@ -1193,17 +703,6 @@ $btn-size-sm: 36px;
 	to {
 		opacity: 1;
 		transform: translateY(0);
-	}
-}
-
-@keyframes slideDown {
-	from {
-		opacity: 0;
-		max-height: 0;
-	}
-	to {
-		opacity: 1;
-		max-height: 500px;
 	}
 }
 
@@ -1240,170 +739,4 @@ $btn-size-sm: 36px;
 	}
 }
 
-/* Component Cards Styles (NEW) */
-.component-cards-area {
-	margin: 12px 0;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.component-card {
-	border: 1px solid #ddd;
-	border-radius: 8px;
-	padding: 12px;
-	background: #f9f9f9;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-	transition: all 0.3s ease;
-
-	&:hover {
-		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
-		border-color: #0066cc;
-	}
-}
-
-.component-header {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-bottom: 8px;
-	border-bottom: 1px solid #eee;
-	padding-bottom: 8px;
-}
-
-.component-name {
-	font-size: 14px;
-	font-weight: 600;
-	color: #333;
-	margin: 0;
-}
-
-.component-category {
-	display: inline-block;
-	padding: 2px 8px;
-	background: #0066cc;
-	color: white;
-	border-radius: 4px;
-	font-size: 11px;
-	font-weight: 500;
-}
-
-.component-body {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.component-description {
-	font-size: 12px;
-	color: #555;
-	line-height: 1.5;
-	margin: 0;
-}
-
-.props-section,
-.code-section {
-	margin-top: 8px;
-
-	h5 {
-		font-size: 12px;
-		font-weight: 600;
-		color: #333;
-		margin: 0 0 6px 0;
-	}
-}
-
-.props-table {
-	width: 100%;
-	font-size: 11px;
-	border-collapse: collapse;
-
-	tbody tr {
-		border-bottom: 1px solid #eee;
-
-		&:last-child {
-			border-bottom: none;
-		}
-
-		td {
-			padding: 4px 6px;
-		}
-	}
-
-	.prop-name {
-		font-weight: 600;
-		color: #333;
-		max-width: 100px;
-		word-break: break-word;
-	}
-
-	.prop-type {
-		color: #666;
-		font-family: monospace;
-		font-size: 10px;
-	}
-}
-
-.code-block {
-	background: #f5f5f5;
-	border: 1px solid #ddd;
-	border-radius: 4px;
-	padding: 8px;
-	margin: 6px 0;
-	font-size: 11px;
-	font-family: 'Monaco', 'Courier New', monospace;
-	overflow-x: auto;
-	color: #333;
-	line-height: 1.4;
-
-	code {
-		display: block;
-		white-space: pre-wrap;
-		word-break: break-all;
-	}
-}
-
-.copy-btn {
-	padding: 4px 10px;
-	font-size: 11px;
-	background: #0066cc;
-	color: white;
-	border: none;
-	border-radius: 4px;
-	cursor: pointer;
-	transition: all 0.2s ease;
-
-	&:hover {
-		background: #0052a3;
-		transform: scale(1.05);
-	}
-
-	&:active {
-		transform: scale(0.98);
-	}
-}
-
-.component-actions {
-	display: flex;
-	gap: 8px;
-	margin-top: 8px;
-}
-
-.view-source-link {
-	display: inline-block;
-	padding: 4px 10px;
-	font-size: 11px;
-	background: #e8f0fe;
-	color: #0066cc;
-	border: 1px solid #0066cc;
-	border-radius: 4px;
-	text-decoration: none;
-	transition: all 0.2s ease;
-	cursor: pointer;
-
-	&:hover {
-		background: #0066cc;
-		color: white;
-	}
-}
 </style>

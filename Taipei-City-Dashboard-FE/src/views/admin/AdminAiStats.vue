@@ -11,81 +11,81 @@ const dayOptions = [7, 14, 30, 60, 90];
 
 const MODES = ["agent_rag", "agent_chat", "vector_fallback", "unknown"];
 const MODE_LABELS = {
-  agent_rag: "Agent + RAG",
-  agent_chat: "Agent",
-  vector_fallback: "向量備援",
-  unknown: "未知",
+	agent_rag: "Agent + RAG",
+	agent_chat: "Agent",
+	vector_fallback: "向量備援",
+	unknown: "未知",
 };
 const MODE_COLORS = {
-  agent_rag: "#4ade80",
-  agent_chat: "#60a5fa",
-  vector_fallback: "#facc15",
-  unknown: "#94a3b8",
+	agent_rag: "#4ade80",
+	agent_chat: "#60a5fa",
+	vector_fallback: "#facc15",
+	unknown: "#94a3b8",
 };
 
 const stats = computed(() => adminStore.aiStats);
 
 // --- Summary cards ---
 const summaryCards = computed(() => {
-  if (!stats.value) return [];
-  const { totals, total } = stats.value;
-  return MODES.filter((m) => totals?.[m] != null).map((m) => ({
-    mode: m,
-    label: MODE_LABELS[m],
-    count: totals[m] || 0,
-    pct: total ? ((totals[m] / total) * 100).toFixed(1) : "0.0",
-    color: MODE_COLORS[m],
-  }));
+	if (!stats.value) return [];
+	const { totals, total } = stats.value;
+	return MODES.filter((m) => totals?.[m] != null).map((m) => ({
+		mode: m,
+		label: MODE_LABELS[m],
+		count: totals[m] || 0,
+		pct: total ? ((totals[m] / total) * 100).toFixed(1) : "0.0",
+		color: MODE_COLORS[m],
+	}));
 });
 
 // --- Chart data: group daily rows by date ---
 const chartOptions = computed(() => {
-  if (!stats.value?.daily?.length) return {};
-  const dailyMap = {};
-  for (const row of stats.value.daily) {
-    if (!dailyMap[row.date]) dailyMap[row.date] = {};
-    dailyMap[row.date][row.answer_mode] = row.count;
-  }
-  const sortedDates = Object.keys(dailyMap).sort();
+	if (!stats.value?.daily?.length) return {};
+	const dailyMap = {};
+	for (const row of stats.value.daily) {
+		if (!dailyMap[row.date]) dailyMap[row.date] = {};
+		dailyMap[row.date][row.answer_mode] = row.count;
+	}
+	const sortedDates = Object.keys(dailyMap).sort();
 
-  return {
-    chart: { type: "line", toolbar: { show: false }, background: "transparent" },
-    theme: { mode: "dark" },
-    stroke: { curve: "smooth", width: 2 },
-    xaxis: {
-      categories: sortedDates,
-      labels: { rotate: -45, style: { fontSize: "11px" } },
-    },
-    yaxis: { labels: { formatter: (v) => Math.round(v) } },
-    legend: { position: "top" },
-    colors: MODES.map((m) => MODE_COLORS[m]),
-    tooltip: { x: { show: true } },
-    grid: { borderColor: "#3f3f46" },
-  };
+	return {
+		chart: { type: "line", toolbar: { show: false }, background: "transparent" },
+		theme: { mode: "dark" },
+		stroke: { curve: "smooth", width: 2 },
+		xaxis: {
+			categories: sortedDates,
+			labels: { rotate: -45, style: { fontSize: "11px" } },
+		},
+		yaxis: { labels: { formatter: (v) => Math.round(v) } },
+		legend: { position: "top" },
+		colors: MODES.map((m) => MODE_COLORS[m]),
+		tooltip: { x: { show: true } },
+		grid: { borderColor: "#3f3f46" },
+	};
 });
 
 const chartSeries = computed(() => {
-  if (!stats.value?.daily?.length) return [];
-  const dailyMap = {};
-  for (const row of stats.value.daily) {
-    if (!dailyMap[row.date]) dailyMap[row.date] = {};
-    dailyMap[row.date][row.answer_mode] = row.count;
-  }
-  const sortedDates = Object.keys(dailyMap).sort();
-  return MODES.map((m) => ({
-    name: MODE_LABELS[m],
-    data: sortedDates.map((d) => dailyMap[d]?.[m] || 0),
-  })).filter((s) => s.data.some((v) => v > 0));
+	if (!stats.value?.daily?.length) return [];
+	const dailyMap = {};
+	for (const row of stats.value.daily) {
+		if (!dailyMap[row.date]) dailyMap[row.date] = {};
+		dailyMap[row.date][row.answer_mode] = row.count;
+	}
+	const sortedDates = Object.keys(dailyMap).sort();
+	return MODES.map((m) => ({
+		name: MODE_LABELS[m],
+		data: sortedDates.map((d) => dailyMap[d]?.[m] || 0),
+	})).filter((s) => s.data.some((v) => v > 0));
 });
 
 // --- Daily table: flattened rows sorted desc by date ---
 const tableRows = computed(() => {
-  if (!stats.value?.daily) return [];
-  return [...stats.value.daily].sort((a, b) => b.date.localeCompare(a.date));
+	if (!stats.value?.daily) return [];
+	return [...stats.value.daily].sort((a, b) => b.date.localeCompare(a.date));
 });
 
 function refresh() {
-  adminStore.getAiStats(selectedDays.value);
+	adminStore.getAiStats(selectedDays.value);
 }
 
 watch(selectedDays, refresh);

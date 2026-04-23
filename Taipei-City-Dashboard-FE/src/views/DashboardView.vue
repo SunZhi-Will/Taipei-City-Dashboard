@@ -26,53 +26,53 @@ const authStore = useAuthStore();
 const expandedComponentId = ref(null);
 
 const expandedComponent = computed(() => {
-  return (
-    contentStore.currentDashboard.components?.find(
-      (item) => item.id === expandedComponentId.value
-    ) || null
-  );
+	return (
+		contentStore.currentDashboard.components?.find(
+			(item) => item.id === expandedComponentId.value
+		) || null
+	);
 });
 
 function toggleContentFocus(id) {
-  expandedComponentId.value = expandedComponentId.value === id ? null : id;
+	expandedComponentId.value = expandedComponentId.value === id ? null : id;
 }
 
 function handleDeleteExpanded(id) {
-  contentStore.deleteComponent(id);
-  expandedComponentId.value = null;
+	contentStore.deleteComponent(id);
+	expandedComponentId.value = null;
 }
 
 function handleChangeCityExpanded(city) {
-  if (!expandedComponent.value) {
-    return;
-  }
+	if (!expandedComponent.value) {
+		return;
+	}
 
-  const selectedData = contentStore.cityDashboard.components.find((data) => {
-    return (
-      data.index === expandedComponent.value.index &&
+	const selectedData = contentStore.cityDashboard.components.find((data) => {
+		return (
+			data.index === expandedComponent.value.index &&
       data.city === city
-    );
-  });
+		);
+	});
 
-  if (!selectedData) {
-    return;
-  }
+	if (!selectedData) {
+		return;
+	}
 
-  const componentIndex = contentStore.currentDashboard.components.findIndex(
-    (item) => item.id === selectedData.id
-  );
+	const componentIndex = contentStore.currentDashboard.components.findIndex(
+		(item) => item.id === selectedData.id
+	);
 
-  if (componentIndex >= 0) {
-    contentStore.setComponentData(componentIndex, selectedData);
-    expandedComponentId.value = selectedData.id;
-  }
+	if (componentIndex >= 0) {
+		contentStore.setComponentData(componentIndex, selectedData);
+		expandedComponentId.value = selectedData.id;
+	}
 }
 
 watch(
-  () => contentStore.currentDashboard.index,
-  () => {
-    expandedComponentId.value = null;
-  }
+	() => contentStore.currentDashboard.index,
+	() => {
+		expandedComponentId.value = null;
+	}
 );
 
 function handleOpenSettings() {

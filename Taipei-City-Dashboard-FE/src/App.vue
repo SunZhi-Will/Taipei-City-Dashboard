@@ -210,21 +210,30 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-container">
     <NotificationBar />
-    <NavBar v-if="authStore.currentPath !== 'embed'" />
+		<NavBar
+			v-if="
+				authStore.currentPath !== 'embed' &&
+					authStore.currentPath !== 'mapview'
+			"
+		/>
+		<!-- /mapview standalone fullscreen layout -->
+		<div
+			v-if="authStore.currentPath === 'mapview'"
+			class="app-mapview-layout"
+		>
+			<RouterView />
+		</div>
     <!-- /mapview, /dashboard layouts -->
     <div
-      v-if="
-        authStore.currentPath === 'mapview' ||
-          authStore.currentPath === 'dashboard'
-      "
+			v-else-if="authStore.currentPath === 'dashboard'"
       class="app-content"
     >
       <SideBar />
       <div class="app-content-main">
         <SettingsBar />
-				<div class="app-content-body">
-					<RouterView />
-				</div>
+        <div class="app-content-body">
+          <RouterView />
+        </div>
       </div>
     </div>
     <!-- /admin layouts -->
@@ -234,9 +243,9 @@ onBeforeUnmount(() => {
     >
       <AdminSideBar />
       <div class="app-content-main">
-				<div class="app-content-body">
-					<RouterView />
-				</div>
+        <div class="app-content-body">
+          <RouterView />
+        </div>
       </div>
     </div>
     <!-- /component, /component/:index layouts -->
@@ -246,22 +255,38 @@ onBeforeUnmount(() => {
     >
       <ComponentSideBar />
       <div class="app-content-main">
-				<div class="app-content-body">
-					<RouterView />
-				</div>
+        <div class="app-content-body">
+          <RouterView />
+        </div>
       </div>
     </div>
+		<div
+			v-else-if="authStore.currentPath === 'ai-studio'"
+			class="app-content"
+		>
+			<div class="app-content-main">
+				<div class="app-content-body app-content-body--flush">
+					<RouterView />
+				</div>
+			</div>
+		</div>
     <div v-else>
       <router-view />
     </div>
     <InitialWarning />
     <LogIn />
-		<ChatWidgetMount v-if="shouldShowChatWidget" />
+    <ChatWidgetMount v-if="shouldShowChatWidget" />
   </div>
 </template>
 
 <style scoped lang="scss">
 .app {
+	&-mapview-layout {
+		width: 100vw;
+		height: calc(100vh);
+		height: calc(var(--vh) * 100);
+	}
+
 	&-container {
 		max-width: 100vw;
 		max-height: 100vh;
@@ -298,6 +323,10 @@ onBeforeUnmount(() => {
 			padding-bottom: var(--font-m);
 			margin-bottom: 0;
 			overflow-y: auto;
+
+			&--flush {
+				padding-bottom: 0;
+			}
 
 			> * {
 				margin-bottom: 0;

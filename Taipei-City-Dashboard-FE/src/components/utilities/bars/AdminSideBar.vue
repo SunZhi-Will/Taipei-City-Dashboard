@@ -46,61 +46,61 @@ onMounted(() => {
           : "keyboard_double_arrow_right"
       }}</span>
     </button>
-		<div class="adminsidebar-content">
-    <h2>{{ isExpanded ? `儀表板設定` : `表板` }}</h2>
-    <template
-      v-for="city in contentStore.cityManager.activeCities"
-      :key="city"
-    >
+    <div class="adminsidebar-content">
+      <h2>{{ isExpanded ? `儀表板設定` : `表板` }}</h2>
+      <template
+        v-for="city in contentStore.cityManager.activeCities"
+        :key="city"
+      >
+        <SideBarTab
+          icon="dashboard"
+          :title="`${contentStore.cityManager.getExpandedNameName(city)}`"
+          index="dashboard"
+          :expanded="isExpanded"
+          :city="city"
+        />
+      </template>
+      <h2>{{ isExpanded ? `組件設定` : `組件` }}</h2>
       <SideBarTab
-        icon="dashboard"
-        :title="`${contentStore.cityManager.getExpandedNameName(city)}`"
-        index="dashboard"
+        icon="edit_note"
+        title="編輯公開組件"
         :expanded="isExpanded"
-        :city="city"
+        index="edit-component"
       />
-    </template>
-    <h2>{{ isExpanded ? `組件設定` : `組件` }}</h2>
-    <SideBarTab
-      icon="edit_note"
-      title="編輯公開組件"
-      :expanded="isExpanded"
-      index="edit-component"
-    />
-    <h2>{{ isExpanded ? `問題回報` : `問題` }}</h2>
-    <SideBarTab
-      icon="bug_report"
-      title="待回覆問題"
-      :expanded="isExpanded"
-      index="issue"
-    />
-    <SideBarTab
-      icon="flood"
-      title="民眾災害通報"
-      :expanded="isExpanded"
-      index="disaster"
-    />
-    <h2>{{ isExpanded ? `系統總覽` : `系統` }}</h2>
-    <SideBarTab
-      icon="person"
-      title="使用者資訊"
-      :expanded="isExpanded"
-      index="user"
-    />
-    <SideBarTab
-      icon="handshake"
-      title="貢獻者資訊"
-      :expanded="isExpanded"
-      index="contributor"
-    />
-    <h2>{{ isExpanded ? `AI 監控` : `AI` }}</h2>
-    <SideBarTab
-      icon="query_stats"
-      title="AI 問答統計"
-      :expanded="isExpanded"
-      index="ai-stats"
-    />
-		</div>
+      <h2>{{ isExpanded ? `問題回報` : `問題` }}</h2>
+      <SideBarTab
+        icon="bug_report"
+        title="待回覆問題"
+        :expanded="isExpanded"
+        index="issue"
+      />
+      <SideBarTab
+        icon="flood"
+        title="民眾災害通報"
+        :expanded="isExpanded"
+        index="disaster"
+      />
+      <h2>{{ isExpanded ? `系統總覽` : `系統` }}</h2>
+      <SideBarTab
+        icon="person"
+        title="使用者資訊"
+        :expanded="isExpanded"
+        index="user"
+      />
+      <SideBarTab
+        icon="handshake"
+        title="貢獻者資訊"
+        :expanded="isExpanded"
+        index="contributor"
+      />
+      <h2>{{ isExpanded ? `AI 監控` : `AI` }}</h2>
+      <SideBarTab
+        icon="query_stats"
+        title="AI 問答統計"
+        :expanded="isExpanded"
+        index="ai-stats"
+      />
+    </div>
   </div>
 </template>
 

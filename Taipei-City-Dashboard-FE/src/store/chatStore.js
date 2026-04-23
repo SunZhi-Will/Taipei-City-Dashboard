@@ -2,12 +2,20 @@ import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import http from "../router/axios";
 import { isOfficialComponent } from "../constants/nonOfficialComponentIndexes";
-import { getComponentDataTimeframe } from "../assets/utilityFunctions/dataTimeframe";
+import {
+	queryByTwai,
+	queryByVector,
+	componentsFromAgentResult,
+	ensureDashboardConfigs,
+	selectFocusedComponents,
+	fetchDashboardComponentsByVector,
+	buildComponentNarrative,
+	resolveSceneFromAI,
+	saveChatLog as aiChatServiceSaveChatLog,
+} from "../services/aiChatService";
+
 
 const USE_TWAI_CHAT = (import.meta.env.VITE_USE_TWAI_CHAT ?? "true") !== "false";
-const MAX_CONTEXT_MESSAGES = 12;
-const TWAI_MAX_RETRY = 2;
-
 export const useChatStore = defineStore('chat', () => {
   	// 預設訊息
   	const defaultChatData = [
@@ -48,7 +56,7 @@ export const useChatStore = defineStore('chat', () => {
 	const normalizeText = (text = '') =>
 		String(text)
 			.toLowerCase()
-			.replace(/[\s\u3000，,。.!！?？、;；:\-_/()（）\[\]【】]/g, '');
+			.replace(/[\s\u3000，,。.!！?？、;；:\-_/()（）[\]【】]/g, '');
 
 	const isDirectComponentIntent = (query = '') => {
 		const q = String(query || '');
@@ -253,6 +261,72 @@ export const useChatStore = defineStore('chat', () => {
 		return `若您要延伸比較，也可以一起看 ${names.slice(0, -1).join('、')} 與 ${names[names.length - 1]}。`;
 	};
 
+	const extractSceneJson = (text = '') => {
+		const rawText = String(text || '');
+		const fencedBlocks = [...rawText.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)]
+			.map((item) => item[1])
+			.filter(Boolean);
+
+		const candidates = [...fencedBlocks, rawText];
+		for (const candidate of candidates) {
+			const start = candidate.indexOf('{');
+			const end = candidate.lastIndexOf('}');
+			if (start === -1 || end === -1 || end <= start) continue;
+
+			try {
+				const parsed = JSON.parse(candidate.slice(start, end + 1));
+				if (!parsed || typeof parsed !== 'object') continue;
+				if (!parsed.layout || !parsed.rightPanelMode && !parsed.layout?.rightPanel) continue;
+				return parsed;
+			} catch {
+				continue;
+			}
+		}
+
+		return null;
+	};
+
+	const buildFallbackScene = (question = '', components = [], preferredMode = 'components') => {
+		const safeComponents = Array.isArray(components) ? components : [];
+		const rightMode = ['components', 'map', 'web'].includes(preferredMode)
+			? preferredMode
+			: 'components';
+
+		return {
+			version: '1.0',
+			title: `AI 生成展示：${String(question || '').slice(0, 30) || '城市議題'}`,
+			objective: '依需求快速組裝可展示儀表板',
+			layout: {
+				type: 'split',
+				leftPanel: {
+					collapsed: false,
+					width: 380,
+				},
+				rightPanel: {
+					mode: rightMode,
+				},
+			},
+			blocks: safeComponents.map((item) => ({
+				type: 'component',
+				title: item?.name || '未命名組件',
+				componentId: item?.id,
+				componentIndex: item?.index,
+				city: item?.city || item?.dashboardConfig?.city || 'taipei',
+			})),
+			meta: {
+				city: safeComponents[0]?.city || safeComponents[0]?.dashboardConfig?.city || 'taipei',
+				theme: 'default',
+				updatedAt: new Date().toISOString(),
+			},
+		};
+	};
+
+	const resolveSceneFromAI = (question = '', aiRawContent = '', components = [], preferredMode = 'components') => {
+		const extracted = extractSceneJson(aiRawContent);
+		if (extracted) return extracted;
+		return buildFallbackScene(question, components, preferredMode);
+	};
+
 	const buildComponentNarrative = (question, components = [], aiContent = '') => {
 		const list = Array.isArray(components) ? components : [];
 		if (list.length === 0) {
@@ -323,6 +397,12 @@ export const useChatStore = defineStore('chat', () => {
 						answerMode: twaiResult.answerMode,
 						selectionReason: twaiResult.agentResult?.selection_reason,
 						usedTools: twaiResult.tools,
+						scene: resolveSceneFromAI(
+							newChatData.content,
+							twaiResult.content,
+							components,
+							components.length > 0 ? 'components' : 'web',
+						),
 						components: components.length > 0 ? components : undefined,
 					});
 					saveChatLog(newChatData.content, finalContent, {
@@ -470,7 +550,7 @@ export const useChatStore = defineStore('chat', () => {
 				return { ok: false, reason: 'EMPTY_RESPONSE' };
 			}
 
-			const content = response.data.data.content;
+			const {content} = response.data.data;
 			const answerMode = response.data.data.answer_mode || 'agent_chat';
 			const tools = Array.isArray(response.data.data.tools) ? response.data.data.tools : [];
 			const agentResult = response.data.data.agent_result || null;
@@ -568,10 +648,10 @@ export const useChatStore = defineStore('chat', () => {
 
 		if (recommendComponents.value && recommendComponents.value?.length > 0) {
 			topK = [...recommendComponents.value].sort((a, b) => b.score - a.score);
-			chatData.value.push({ id: chatData.value.length + 1, role: 'bot', isDefault: false, button: [{ id:1, text:'建立儀表板' }], content: `您好 😊 \n 以下是根據您的問題，自動為您推薦的「組件清單」。您可以將這些組件整批加入「個人儀表板」，方便日後快速查看與使用。\n`, relations: topK });
+			chatData.value.push({ id: chatData.value.length + 1, role: 'bot', isDefault: false, button: [{ id:1, text:'建立儀表板' }], content: `您好 😊 \n 以下是根據您的問題，自動為您推薦的「組件清單」。您可以將這些組件整批加入「個人儀表板」，方便日後快速查看與使用。\n`, relations: topK, scene: resolveSceneFromAI(question, '', topK, 'components') });
 			chatData.value.push({ id: chatData.value.length + 1, role: 'bot', isDefault: false, content: `若您有任何新的查詢或想深入探索的內容，都可以隨時在對話框告訴我～\n 我很樂意再協助您 💬✨` });
 		} else {
-			chatData.value.push({ id: chatData.value.length + 1, role: 'bot', isDefault: false, content: `很抱歉，您提供的描述沒有相似組件，請繼續提問 ! ` });
+			chatData.value.push({ id: chatData.value.length + 1, role: 'bot', isDefault: false, content: `很抱歉，您提供的描述沒有相似組件，請繼續提問 ! `, scene: resolveSceneFromAI(question, '', [], 'web') });
 		}
 
 		// 分析結束後紀錄問答log

@@ -82,6 +82,14 @@ export const useMapStore = defineStore("map", {
 		viewPoints: [],
 		marker: null,
 		tempMarkerCoordinates: null,
+		// Cache for local geojson files to avoid repeat parse/load.
+		localGeoJsonCache: {},
+		// Track source error handlers to avoid duplicate listeners.
+		mapSourceErrorHandlers: {},
+		// Guard rails for remote and computed heavy layers.
+		wfsFeatureCap: 20000,
+		maxIsolineInterpolationPoints: 120000,
+		maxIsolineSegments: 30000,
 		// Store the user's current location,
 		userLocation: { latitude: null, longitude: null },
 		// 3D Mrt Map 相關參數
@@ -103,6 +111,8 @@ export const useMapStore = defineStore("map", {
 			this.map = null;
 			this.marker = null;
 			this.overlay = null;
+			this.localGeoJsonCache = {};
+			this.mapSourceErrorHandlers = {};
 			const MAPBOXTOKEN = import.meta.env.VITE_MAPBOXTOKEN;
 			mapboxGl.accessToken = MAPBOXTOKEN;
 			this.map = new mapboxGl.Map({
@@ -183,28 +193,69 @@ export const useMapStore = defineStore("map", {
 			);
 
 			if (!this.map) return;
+			const handleTownData = (data) => {
+				if (!this.map) return;
+				if (!this.map.getSource("metrotaipei_town_label")) {
+					this.map.addSource("metrotaipei_town_label", {
+						type: "geojson",
+						data,
+					});
+				}
+				if (!this.map.getLayer("metrotaipei_town_label")) {
+					this.map.addLayer(metroTaipeiTown);
+				}
+				if (!hasSourceLayer && !this.map.getLayer("metrotaipei_town")) {
+					this.loadingLayers.push("metrotaipei_town");
+					this.map.addLayer({
+						...metroTpDistrict,
+						id: "metrotaipei_town",
+						source: "metrotaipei_town_label",
+					});
+					this.loadingLayers = this.loadingLayers.filter(
+						(el) => el !== "metrotaipei_town",
+					);
+				}
+			};
+
+			const handleVillageData = (data) => {
+				if (!this.map) return;
+				if (!this.map.getSource("metrotaipei_village_label")) {
+					this.map.addSource("metrotaipei_village_label", {
+						type: "geojson",
+						data,
+					});
+				}
+				if (!this.map.getLayer("metrotaipei_village_label")) {
+					this.map.addLayer(metroTaipeiVillage);
+				}
+				if (
+					!hasSourceLayer &&
+					!this.map.getLayer("metrotaipei_village")
+				) {
+					this.loadingLayers.push("metrotaipei_village");
+					this.map.addLayer({
+						...metroTpVillage,
+						id: "metrotaipei_village",
+						source: "metrotaipei_village_label",
+					});
+					this.loadingLayers = this.loadingLayers.filter(
+						(el) => el !== "metrotaipei_village",
+					);
+				}
+			};
+
 			// metroTaipei District Labels
 			fetch(`/mapData/metrotaipei_town.geojson`)
 				.then((response) => response.json())
-				.then((data) => {
-					this.map
-						.addSource("metrotaipei_town_label", {
-							type: "geojson",
-							data: data,
-						})
-						.addLayer(metroTaipeiTown);
-				});
+				.then(handleTownData)
+				.catch((e) => console.error(e));
+
 			// metroTaipei Village Labels
 			fetch(`/mapData/metrotaipei_village.geojson`)
 				.then((response) => response.json())
-				.then((data) => {
-					this.map
-						.addSource("metrotaipei_village_label", {
-							type: "geojson",
-							data: data,
-						})
-						.addLayer(metroTaipeiVillage);
-				});
+				.then(handleVillageData)
+				.catch((e) => console.error(e));
+
 			// Taipei 3D Buildings
 			if (!authStore.isMobileDevice) {
 				this.map
@@ -236,64 +287,6 @@ export const useMapStore = defineStore("map", {
 						],
 					})
 					.addLayer(metroTpDistrict);
-			} else {
-				// 加入 loading
-				this.loadingLayers.push("metrotaipei_town");
-
-				// 載入區界
-				// 加入 source + layer
-				this.map.addSource("metrotaipei_town", {
-					type: "geojson",
-					data: "/mapData/metrotaipei_town.geojson",
-				});
-
-				this.map.addLayer({
-					...metroTpDistrict,
-					id: "metrotaipei_town",
-					source: "metrotaipei_town",
-				});
-
-				// 綁定 loading 完成
-				this.map.on("sourcedata", (e) => {
-					if (
-						e.sourceId === "metrotaipei_town" &&
-						e.isSourceLoaded &&
-						this.loadingLayers.includes("metrotaipei_town")
-					) {
-						this.loadingLayers = this.loadingLayers.filter(
-							(el) => el !== "metrotaipei_town",
-						);
-					}
-				});
-
-				// 載入村里界
-				// 加入 loading
-				this.loadingLayers.push("metrotaipei_village");
-
-				// 加入 source + layer
-				this.map.addSource("metrotaipei_village", {
-					type: "geojson",
-					data: "/mapData/metrotaipei_village.geojson",
-				});
-
-				this.map.addLayer({
-					...metroTpVillage,
-					id: "metrotaipei_village",
-					source: "metrotaipei_village",
-				});
-
-				// 綁定 loading 完成
-				this.map.on("sourcedata", (e) => {
-					if (
-						e.sourceId === "metrotaipei_village" &&
-						e.isSourceLoaded &&
-						this.loadingLayers.includes("metrotaipei_village")
-					) {
-						this.loadingLayers = this.loadingLayers.filter(
-							(el) => el !== "metrotaipei_village",
-						);
-					}
-				});
 			}
 
 			this.addSymbolSources();
@@ -453,12 +446,57 @@ export const useMapStore = defineStore("map", {
 		},
 		// 2. Call an API to get the layer data
 		fetchLocalGeoJson(map_config) {
+			if (this.localGeoJsonCache[map_config.index]) {
+				this.addGeojsonSource(
+					map_config,
+					this.localGeoJsonCache[map_config.index],
+				);
+				return;
+			}
+
 			axios
 				.get(`/mapData/${map_config.index}.geojson`)
 				.then((rs) => {
+					this.localGeoJsonCache[map_config.index] = rs.data;
 					this.addGeojsonSource(map_config, rs.data);
 				})
 				.catch((e) => console.error(e));
+		},
+		getCurrentBboxParam() {
+			if (!this.map) return "";
+			const bounds = this.map.getBounds();
+			if (!bounds) return "";
+			return `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+		},
+		buildWfsUrl(index, maxFeatures = this.wfsFeatureCap) {
+			const bbox = this.getCurrentBboxParam();
+			const safeMax = Math.max(2000, Math.min(maxFeatures, 50000));
+			const bboxQuery = bbox ? `&bbox=${bbox},EPSG:4326` : "";
+			return `${location.origin}/geo_server/taipei_vioc/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=taipei_vioc%3A${index}&maxFeatures=${safeMax}&outputFormat=application%2Fjson${bboxQuery}`;
+		},
+		attachSourceErrorHandler(sourceId, mapLayerId) {
+			if (this.mapSourceErrorHandlers[sourceId]) return;
+
+			const handler = (e) => {
+				if (e.sourceId === sourceId) {
+					console.error("Source error:", e);
+					if (this.map?.getSource(sourceId)) {
+						this.map.removeSource(sourceId);
+					}
+					this.loadingLayers = this.loadingLayers.filter(
+						(el) => el !== mapLayerId,
+					);
+				}
+			};
+
+			this.mapSourceErrorHandlers[sourceId] = handler;
+			this.map.on("error", handler);
+		},
+		getAdaptiveIsolineGridSize() {
+			const zoom = this.map?.getZoom?.() || 11;
+			if (zoom >= 14) return 0.0015;
+			if (zoom >= 12) return 0.002;
+			return 0.003;
 		},
 		// 3-1. Add a local geojson as a source in mapbox
 		addGeojsonSource(map_config, data) {
@@ -492,9 +530,7 @@ export const useMapStore = defineStore("map", {
 				let res2 = {};
 				let res3 = {};
 				if (map_config.type === "symbol-3d") {
-					res = await axios.get(
-						`${location.origin}/geo_server/taipei_vioc/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=taipei_vioc%3A${map_config.index}&maxFeatures=1000000&outputFormat=application%2Fjson`,
-					);
+					res = await axios.get(this.buildWfsUrl(map_config.index));
 					res2 = await axios.get(
 						`/mapData/${map_config.index}_route.geojson`,
 					);
@@ -508,9 +544,7 @@ export const useMapStore = defineStore("map", {
 						);
 					}
 				} else {
-					res = await axios.get(
-						`${location.origin}/geo_server/taipei_vioc/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=taipei_vioc%3A${map_config.index}&maxFeatures=1000000&outputFormat=application%2Fjson`,
-					);
+					res = await axios.get(this.buildWfsUrl(map_config.index));
 				}
 
 				if (map_config.type === "arc") {
@@ -533,8 +567,9 @@ export const useMapStore = defineStore("map", {
 				}
 			} else {
 				try {
+					const sourceId = `${map_config.layerId}-source`;
 					// 添加源
-					this.map.addSource(`${map_config.layerId}-source`, {
+					this.map.addSource(sourceId, {
 						type: "vector",
 						scheme: "tms",
 						tolerance: 0,
@@ -543,38 +578,21 @@ export const useMapStore = defineStore("map", {
 						],
 					});
 
-					// 監聽錯誤
-					this.map.on("error", (e) => {
-						if (e.sourceId === `${map_config.layerId}-source`) {
-							console.error("Source error:", e);
-
-							// 清理已添加的源（如果存在）
-							if (
-								this.map.getSource(
-									`${map_config.layerId}-source`,
-								)
-							) {
-								this.map.removeSource(
-									`${map_config.layerId}-source`,
-								);
-							}
-							// 從 loadingLayers 中移除
-							this.loadingLayers = this.loadingLayers.filter(
-								(el) => el !== map_config.layerId,
-							);
-						}
-					});
+					this.attachSourceErrorHandler(sourceId, map_config.layerId);
 
 					// 監聽源加載完成
 					const sourceLoaded = new Promise((resolve, reject) => {
+						let timeoutId = null;
 						const checkSource = (e) => {
-							if (e.sourceId === `${map_config.layerId}-source`) {
+							if (e.sourceId === sourceId) {
 								if (e.isSourceLoaded) {
+									clearTimeout(timeoutId);
 									this.map.off("sourcedata", checkSource);
 									resolve();
 								}
 								// 如果有錯誤也需要處理
 								if (e.error) {
+									clearTimeout(timeoutId);
 									this.map.off("sourcedata", checkSource);
 									reject(e.error);
 								}
@@ -584,7 +602,7 @@ export const useMapStore = defineStore("map", {
 						this.map.on("sourcedata", checkSource);
 
 						// 設置超時
-						setTimeout(() => {
+						timeoutId = setTimeout(() => {
 							this.map.off("sourcedata", checkSource);
 							reject(new Error("Source load timeout"));
 						}, 10000);
@@ -931,9 +949,22 @@ export const useMapStore = defineStore("map", {
 			let latEnd = 25.3;
 
 			let targetPoints = [];
-			let gridSize = 0.001;
+			let gridSize = this.getAdaptiveIsolineGridSize();
 			let rowN = 0;
 			let colN = 0;
+
+			const lngRange = lngEnd - lngStart;
+			const latRange = latEnd - latStart;
+			const estimatedPoints =
+				(Math.floor(lngRange / gridSize) + 1) *
+				(Math.floor(latRange / gridSize) + 1);
+
+			if (estimatedPoints > this.maxIsolineInterpolationPoints) {
+				const upscale = Math.sqrt(
+					estimatedPoints / this.maxIsolineInterpolationPoints,
+				);
+				gridSize = gridSize * upscale;
+			}
 
 			// - Generate target point coordinates
 			for (let i = latStart; i <= latEnd; i += gridSize, rowN += 1) {
@@ -993,6 +1024,10 @@ export const useMapStore = defineStore("map", {
 						};
 					}),
 				);
+
+				if (isoline_data.features.length >= this.maxIsolineSegments) {
+					break;
+				}
 			}
 
 			// Step 3: Add source and layer
@@ -1701,6 +1736,9 @@ export const useMapStore = defineStore("map", {
 							new THREE.Vector3(1, 0, 0),
 							Math.PI / 2,
 						);
+						camera.projectionMatrix = new THREE.Matrix4().fromArray(
+							matrix,
+						);
 
 						if (now - customLayer.lastUpdateTime >= 200) {
 							updateCarsPosition(mrtCars);
@@ -1708,7 +1746,9 @@ export const useMapStore = defineStore("map", {
 						}
 
 						for (const car of mrtCars) {
-							// updateCarsPosition([car]); // 單台車也用同一個計算
+							if (!car.model || !car.currentLngLat || !car.lastDir) {
+								continue;
+							}
 
 							const pos = car.currentLngLat;
 							const dir = car.lastDir;
@@ -1750,13 +1790,8 @@ export const useMapStore = defineStore("map", {
 								.multiply(scaleMatrix)
 								.multiply(rotationMatrix)
 								.multiply(rotationX);
-
-							camera.projectionMatrix = new THREE.Matrix4()
-								.fromArray(matrix)
-								.multiply(modelMatrix);
-
-							renderer.resetState();
-							renderer.render(scene, camera);
+							car.model.matrix.copy(modelMatrix);
+							car.model.matrixWorldNeedsUpdate = true;
 
 							// 更新 tooltip
 							if (
@@ -1785,9 +1820,14 @@ export const useMapStore = defineStore("map", {
 								customLayer.carTooltip.style.transform = `translate(${screenPos.x + customLayer.tooltipOffsetX}px, ${screenPos.y + customLayer.tooltipOffsetY}px)`;
 							}
 						}
+
+						renderer.resetState();
+						renderer.render(scene, camera);
 					}
-					// 下一幀
-					customLayer.map.triggerRepaint();
+					// 僅在動畫進行中或 tooltip 跟隨時持續重繪
+					if (!allFinished || customLayer.selectedCar) {
+						customLayer.map.triggerRepaint();
+					}
 				},
 			};
 
@@ -2563,6 +2603,84 @@ export const useMapStore = defineStore("map", {
 		},
 
 		/* Clearing the map */
+		// 0. Destroy Mapbox instance properly (called on component unmount)
+		destroyMapBox() {
+			try {
+				if (this.map) {
+					Object.values(this.mapSourceErrorHandlers).forEach((handler) => {
+						this.map.off("error", handler);
+					});
+					this.mapSourceErrorHandlers = {};
+
+					// Remove all event listeners first
+					this.map.off("load");
+					this.map.off("click");
+					this.map.off("dblclick");
+					this.map.off("idle");
+					this.map.off("moveend");
+					this.map.off("zoomend");
+					this.map.off("dragend");
+
+					// Remove all layers and sources
+					this.currentLayers.forEach((element) => {
+						try {
+							if (this.map?.getLayer(element)) {
+								this.map.removeLayer(element);
+							}
+							if (this.map?.getSource(`${element}-source`)) {
+								this.map.removeSource(`${element}-source`);
+							}
+						} catch (e) {
+							console.warn(`Failed to remove layer ${element}:`, e);
+						}
+					});
+
+					// Remove marker
+					if (this.marker) {
+						try {
+							this.marker.remove();
+						} catch (e) {
+							console.warn("Failed to remove marker:", e);
+						}
+						this.marker = null;
+					}
+
+					// Remove overlay
+					if (this.overlay) {
+						try {
+							this.overlay.setProps({ layers: [] });
+							this.map.removeControl(this.overlay);
+						} catch (e) {
+							console.warn("Failed to remove overlay:", e);
+						}
+						this.overlay = null;
+					}
+
+					// Remove popup
+					this.removePopup();
+
+					// Remove the Mapbox instance completely
+					this.map.remove();
+					this.map = null;
+				}
+			} catch (e) {
+				console.error("Error destroying map:", e);
+				this.map = null;
+			}
+
+			// Reset all state
+			this.currentLayers = [];
+			this.mapConfigs = {};
+			this.currentVisibleLayers = [];
+			this.tempMarkerCoordinates = null;
+			this.loadingLayers = [];
+			this.deckGlLayer = {};
+			this.viewPoints = [];
+			this.prevMrtCars = [];
+			this.layerUpdateTime = {};
+			this.localGeoJsonCache = {};
+			this.mapSourceErrorHandlers = {};
+		},
 		// 1. Called when the user is switching between maps
 		clearOnlyLayers() {
 			this.currentLayers.forEach((element) => {

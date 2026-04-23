@@ -1,0 +1,51 @@
+# ChatBox 過長程式拆分（P0） / ChatBox Long-File Split (P0)
+
+## 2026-04-23 09:58
+
+- objective:
+  - 將過長的 ChatBox 元件做第一階段拆分，降低單檔複雜度並維持既有功能行為。
+
+- files:
+  - Taipei-City-Dashboard-FE/src/components/dialogs/ChatBox.vue
+  - Taipei-City-Dashboard-FE/src/components/dialogs/chat/ChatComposer.vue
+  - Taipei-City-Dashboard-FE/src/components/dialogs/chat/SuggestedTagsBar.vue
+- summary:
+  - 從 ChatBox 拆出輸入區與建議標籤區為獨立子元件，減少父元件 UI 與互動耦合。
+  - 移除 ChatBox 中已搬移的 tags/input 樣式與舊版 component card 殘留樣式，降低樣式噪音。
+  - 補強建立儀表板流程中 relations 空值防護，避免 map 於 undefined 時錯誤。
+- change-type:
+  - Changed
+  - Fixed
+- technical-details:
+  - 新增 ChatComposer：封裝 textarea 自動高度調整、Enter 送出與 v-model 雙向綁定。
+  - 新增 SuggestedTagsBar：封裝 tags 橫向捲動、左右捲動箭頭顯示邏輯與 resize 重新計算。
+  - ChatBox 改為組裝式容器：改以子元件事件回傳處理 click/send，並用 refreshKey 支援展開後重算 tags 捲動按鈕。
+  - 將 ChatBox 行數由 1252 降至 837（-415 行），拆出 178 行與 182 行子元件。
+- verification:
+  - 使用 VS Code diagnostics 檢查以下檔案：
+    - Taipei-City-Dashboard-FE/src/components/dialogs/ChatBox.vue
+    - Taipei-City-Dashboard-FE/src/components/dialogs/chat/ChatComposer.vue
+    - Taipei-City-Dashboard-FE/src/components/dialogs/chat/SuggestedTagsBar.vue
+  - 結果：三個檔案皆顯示 No errors found。
+  - 使用 PowerShell 量測行數：
+    - Get-Content "Taipei-City-Dashboard-FE/src/components/dialogs/ChatBox.vue" | Measure-Object -Line
+    - Get-Content "Taipei-City-Dashboard-FE/src/components/dialogs/chat/ChatComposer.vue" | Measure-Object -Line
+    - Get-Content "Taipei-City-Dashboard-FE/src/components/dialogs/chat/SuggestedTagsBar.vue" | Measure-Object -Line
+- performance-impact:
+  - 執行效能預期無顯著變動。
+  - 開發效能改善：單檔閱讀與修改成本下降，降低後續功能擴充衝突機率。
+- impact-risk:
+  - 風險：樣式作用域由父元件改為子元件 scoped，可能在極端版位下出現細微間距差異。
+  - 邊界：展開/縮放與手機版輸入區位置需手動回歸確認。
+  - 降級策略：若顯示異常，可先回退為父元件內 style 並保留子元件邏輯拆分。
+- regression-test:
+  - 驗證清單：
+    - 一般送出、Shift+Enter 換行、送出後清空輸入。
+    - tags 左右捲動按鈕顯示/隱藏邏輯。
+    - 點擊 tag 可送出查詢。
+    - 展開聊天視窗後 tags 捲動按鈕狀態可更新。
+    - bot 回應中輸入框與送出按鈕 disabled 狀態。
+- traceability:
+  - N/A
+- next-actions:
+  - P1: 再拆 ChatHeader、StickyNotice、MessageList 三塊 UI，將 ChatBox 進一步降到 400 行以下。

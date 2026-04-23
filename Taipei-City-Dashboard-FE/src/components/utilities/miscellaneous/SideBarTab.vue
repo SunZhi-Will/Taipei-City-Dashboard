@@ -56,19 +56,19 @@ const popularThemeGA = (title) => {
 
 <template>
   <router-link
-		:to="tabLink"
-		:class="[
-			'sidebartab',
-			`sidebartab-level-${level}`,
-			{ 'sidebartab-collapsed': !expanded },
-			{ 'sidebartab-active': linkActiveOrNot },
-		]"
-		:title="!expanded ? title : ''"
-		:aria-current="linkActiveOrNot ? 'page' : undefined"
+    :to="tabLink"
+    :class="[
+      'sidebartab',
+      `sidebartab-level-${level}`,
+      { 'sidebartab-collapsed': !expanded },
+      { 'sidebartab-active': linkActiveOrNot },
+    ]"
+    :title="!expanded ? title : ''"
+    :aria-current="linkActiveOrNot ? 'page' : undefined"
     @click="popularThemeGA(title)"
   >
-		<span class="sidebartab-icon">{{ icon }}</span>
-		<h3 class="sidebartab-label">
+    <span class="sidebartab-icon">{{ icon }}</span>
+    <h3 class="sidebartab-label">
       {{ title }}
     </h3>
   </router-link>

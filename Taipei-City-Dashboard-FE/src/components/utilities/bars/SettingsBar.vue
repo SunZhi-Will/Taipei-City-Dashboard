@@ -45,7 +45,10 @@ function handleOpenSettings() {
 </script>
 
 <template>
-  <div v-if="hasContent" class="settingsbar">
+  <div
+    v-if="hasContent"
+    class="settingsbar"
+  >
     <button
       class="show-if-mobile"
       @click="dialogStore.showDialog('mobileNavigation')"

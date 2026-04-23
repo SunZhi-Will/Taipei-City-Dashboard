@@ -31,37 +31,37 @@ const collapsedStates = ref({
 });
 
 function initializeCollapsedStates() {
-  const normalized = {
-    private: Boolean(collapsedStates.value.private),
-    public: Boolean(collapsedStates.value.public),
-    favorites: Boolean(collapsedStates.value.favorites),
-    personal: Boolean(collapsedStates.value.personal),
-  };
+	const normalized = {
+		private: Boolean(collapsedStates.value.private),
+		public: Boolean(collapsedStates.value.public),
+		favorites: Boolean(collapsedStates.value.favorites),
+		personal: Boolean(collapsedStates.value.personal),
+	};
 
 	contentStore.cityManager.activeCities.forEach((city) => {
-    normalized[city] = Boolean(collapsedStates.value[city]);
+		normalized[city] = Boolean(collapsedStates.value[city]);
 	});
 
-  collapsedStates.value = normalized;
+	collapsedStates.value = normalized;
 }
 
 function restoreCollapsedStates() {
-  const storedCollapsedGroups = localStorage.getItem(SIDEBAR_COLLAPSED_GROUPS_KEY);
-  if (!storedCollapsedGroups) {
-    return;
-  }
+	const storedCollapsedGroups = localStorage.getItem(SIDEBAR_COLLAPSED_GROUPS_KEY);
+	if (!storedCollapsedGroups) {
+		return;
+	}
 
-  try {
-    const parsed = JSON.parse(storedCollapsedGroups);
-    if (parsed && typeof parsed === "object") {
-      collapsedStates.value = {
-        ...collapsedStates.value,
-        ...parsed,
-      };
-    }
-  } catch {
-    localStorage.removeItem(SIDEBAR_COLLAPSED_GROUPS_KEY);
-  }
+	try {
+		const parsed = JSON.parse(storedCollapsedGroups);
+		if (parsed && typeof parsed === "object") {
+			collapsedStates.value = {
+				...collapsedStates.value,
+				...parsed,
+			};
+		}
+	} catch {
+		localStorage.removeItem(SIDEBAR_COLLAPSED_GROUPS_KEY);
+	}
 }
 
 function handleOpenAddDashboard() {
@@ -71,7 +71,7 @@ function handleOpenAddDashboard() {
 
 function toggleExpand() {
 	isExpanded.value = isExpanded.value ? false : true;
-  localStorage.setItem(SIDEBAR_EXPANDED_KEY, String(isExpanded.value));
+	localStorage.setItem(SIDEBAR_EXPANDED_KEY, String(isExpanded.value));
 	if (!isExpanded.value) {
 		mapStore.resizeMap();
 	}
@@ -90,26 +90,26 @@ watch(
 	() => contentStore.cityManager.activeCities,
 	() => {
 		initializeCollapsedStates();
-    localStorage.setItem(
-      SIDEBAR_COLLAPSED_GROUPS_KEY,
-      JSON.stringify(collapsedStates.value)
-    );
+		localStorage.setItem(
+			SIDEBAR_COLLAPSED_GROUPS_KEY,
+			JSON.stringify(collapsedStates.value)
+		);
 	},
 	{ immediate: true }
 );
 
 watch(
-  collapsedStates,
-  (state) => {
-    localStorage.setItem(SIDEBAR_COLLAPSED_GROUPS_KEY, JSON.stringify(state));
-  },
-  { deep: true }
+	collapsedStates,
+	(state) => {
+		localStorage.setItem(SIDEBAR_COLLAPSED_GROUPS_KEY, JSON.stringify(state));
+	},
+	{ deep: true }
 );
 
 onMounted(() => {
-  restoreCollapsedStates();
+	restoreCollapsedStates();
 	initializeCollapsedStates();
-  const storedExpandedState = localStorage.getItem(SIDEBAR_EXPANDED_KEY);
+	const storedExpandedState = localStorage.getItem(SIDEBAR_EXPANDED_KEY);
 	if (storedExpandedState === "false") {
 		isExpanded.value = false;
 	} else {
@@ -151,7 +151,10 @@ onMounted(() => {
             class="sidebar-label"
             :class="{ 'is-hidden': !isExpanded }"
           >私人儀表板</span>
-          <span class="sidebar-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.private ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+          <span
+            class="sidebar-chevron material-icons-round"
+            aria-hidden="true"
+          >{{ collapsedStates.private ? "arrow_drop_down" : "arrow_drop_up" }}</span>
         </h1>
         <transition name="collapse">
           <div v-if="!collapsedStates.private">
@@ -160,7 +163,10 @@ onMounted(() => {
                 class="sidebar-label"
                 :class="{ 'is-hidden': !isExpanded }"
               >我的最愛</span>
-              <span class="sidebar-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.favorites ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+              <span
+                class="sidebar-chevron material-icons-round"
+                aria-hidden="true"
+              >{{ collapsedStates.favorites ? "arrow_drop_down" : "arrow_drop_up" }}</span>
             </h2>
             <transition name="collapse">
               <template v-if="!collapsedStates.favorites">
@@ -179,7 +185,10 @@ onMounted(() => {
                   class="sidebar-label"
                   :class="{ 'is-hidden': !isExpanded }"
                 >個人儀表板</span>
-                <span class="sidebar-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+                <span
+                  class="sidebar-chevron material-icons-round"
+                  aria-hidden="true"
+                >{{ collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
               </h2>
               <button
                 :class="{ 'is-inactive': !isExpanded || collapsedStates.personal }"
@@ -228,9 +237,12 @@ onMounted(() => {
           class="sidebar-label"
           :class="{ 'is-hidden': !isExpanded }"
         >公共儀表板</span>
-        <span class="sidebar-chevron material-icons-round" aria-hidden="true">{{ collapsedStates.public ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+        <span
+          class="sidebar-chevron material-icons-round"
+          aria-hidden="true"
+        >{{ collapsedStates.public ? "arrow_drop_down" : "arrow_drop_up" }}</span>
       </h1>
-            <transition name="collapse">
+      <transition name="collapse">
         <div v-if="!collapsedStates.public">
           <template
             v-for="city in contentStore.cityManager.activeCities"
@@ -238,7 +250,10 @@ onMounted(() => {
           >
             <h2 @click="toggleCollapse(city)">
               {{ isExpanded ? `${contentStore.cityManager.getExpandedNameName(city)} ` : contentStore.cityManager.getCollapsedName(city) }}
-              <span class="sidebar-chevron material-icons-round" aria-hidden="true">{{ collapsedStates[city] ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+              <span
+                class="sidebar-chevron material-icons-round"
+                aria-hidden="true"
+              >{{ collapsedStates[city] ? "arrow_drop_down" : "arrow_drop_up" }}</span>
             </h2>
             <transition name="collapse">
               <div

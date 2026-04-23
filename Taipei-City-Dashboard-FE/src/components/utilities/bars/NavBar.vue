@@ -89,6 +89,9 @@ const isLocalhost = computed(() => {
       >
         地圖交叉比對
       </router-link>
+      <router-link to="/ai-studio">
+        AI Studio
+      </router-link>
     </div>
     <div class="navbar-user">
       <button

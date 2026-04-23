@@ -68,17 +68,17 @@ onBeforeUnmount(() => {
     >
       <ChatBox
         v-if="isChatOpen"
-				:class="['chatbox', { expanded: isChatExpanded }]"
+        :class="['chatbox', { expanded: isChatExpanded }]"
         :show-close-button="true"
         @close="closeChat"
-				@expand="handleChatExpand"
+        @expand="handleChatExpand"
       />
-			<div
-				v-if="!isChatOpen"
-				class="chatbot-btn-area"
-			>
+      <div
+        v-if="!isChatOpen"
+        class="chatbot-btn-area"
+      >
         <button
-					ref="launcherButtonRef"
+          ref="launcherButtonRef"
           class="chatbot-btn"
           type="button"
           :aria-label="isChatOpen ? '收合聊天視窗' : '開啟聊天視窗'"
