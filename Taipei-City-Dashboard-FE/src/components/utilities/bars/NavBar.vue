@@ -4,7 +4,7 @@
 
 <script setup>
 const { VITE_APP_TITLE } = import.meta.env;
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useFullscreen } from "@vueuse/core";
 import { useAuthStore } from "../../../store/authStore";
@@ -13,12 +13,23 @@ import { useContentStore } from "../../../store/contentStore";
 
 import UserSettings from "../../dialogs/UserSettings.vue";
 import ContributorsList from "../../dialogs/ContributorsList.vue";
+import MobileDashboardSwitcher from "../../dialogs/MobileDashboardSwitcher.vue";
 
 const route = useRoute();
 const authStore = useAuthStore();
 const contentStore = useContentStore();
 const dialogStore = useDialogStore();
 const { isFullscreen, toggle } = useFullscreen();
+
+const isDropdownOpen = ref(false);
+
+const toggleDropdown = (state) => {
+  if (state !== undefined) {
+    isDropdownOpen.value = state;
+  } else {
+    isDropdownOpen.value = !isDropdownOpen.value;
+  }
+};
 
 const linkQuery = computed(() => {
 	const { query } = route;
@@ -38,27 +49,44 @@ const isLocalhost = computed(() => {
 
 <template>
   <div class="navbar">
-    <a href="/">
-      <div class="navbar-logo">
+    <div class="navbar-logo">
+      <a
+        href="/"
+        class="navbar-logo-link"
+      >
         <div class="navbar-logo-image">
           <img
             src="../../../assets/images/TUIC.svg"
             alt="tuic logo"
           >
         </div>
-        <div class="navbar-logo-titles">
-          <div class="navbar-logo-header">
-            <h1>{{ VITE_APP_TITLE }}</h1>
-            <h2>Taipei City Dashboard</h2>
-          </div>
-          <span class="navbar-theme-separator">/</span>
-          <span class="navbar-theme-name">
-            <span class="navbar-theme-icon">{{ contentStore.currentDashboard.icon }}</span>
-            {{ contentStore.currentDashboard.name }}
-          </span>
+        <div>
+          <h1>{{ VITE_APP_TITLE }}</h1>
+          <h2>Taipei City Dashboard</h2>
+        </div>
+      </a>
+      <div class="navbar-logo-titles">
+        <span class="navbar-theme-separator">/</span>
+        <div
+          class="navbar-theme-name"
+          :class="{ 'navbar-theme-name--active': isDropdownOpen }"
+          @click.stop="authStore.isNarrowDevice && toggleDropdown()"
+        >
+          <span class="navbar-theme-icon material-icons-round">{{ contentStore.currentDashboard.icon }}</span>
+          <span class="navbar-theme-text">{{ contentStore.currentDashboard.name }}</span>
+          <span
+            v-if="authStore.isNarrowDevice"
+            class="navbar-theme-arrow material-icons-round"
+          >arrow_drop_down_circle</span>
+          
+          <!-- Immersive Mobile Menu Overlay (Extracted) -->
+          <MobileDashboardSwitcher 
+            :is-open="isDropdownOpen"
+            @close="toggleDropdown(false)"
+          />
         </div>
       </div>
-    </a>
+    </div>
     <div
       v-if="
         authStore.currentPath !== 'admin'
@@ -198,230 +226,247 @@ const isLocalhost = computed(() => {
 	z-index: 30;
 	overflow: visible;
 
-	&-logo {
-		display: flex;
-		align-items: center;
+    &-logo {
+      display: flex;
+      align-items: center;
 
-		h1 {
-			font-weight: 500;
-			
-			@media screen and (max-width: 500px) {
-				display: none;
-			}
-		}
+      &-link {
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        transition: opacity 0.2s;
 
-		h2 {
-			font-size: var(--font-s);
-			font-weight: 400;
+        &:hover {
+          opacity: 0.8;
+        }
+      }
 
-			@media screen and (max-width: 500px) {
-				display: none;
-			}
-		}
+      h1 {
+        font-weight: 500;
+        font-size: 1.15rem;
+        line-height: 1.1;
+        
+        @media screen and (max-width: 500px) {
+          display: none;
+        }
+      }
 
-		&-image {
-			width: 22.94px;
-			height: 45px;
-			margin: 0 var(--font-m);
+      h2 {
+        font-size: 0.7rem;
+        font-weight: 400;
+        color: var(--color-complement-text);
+        line-height: 1;
 
-			img {
-				height: 45px;
-				filter: invert(1);
-			}
-		}
+        @media screen and (max-width: 500px) {
+          display: none;
+        }
+      }
 
-		&-theme-separator {
-			margin: 0 8px;
-			opacity: 0.5;
-			font-weight: 300;
+      &-image {
+        width: 22.94px;
+        height: 45px;
+        margin: 0 var(--font-m);
 
-			@media screen and (max-width: 768px) {
-				display: none;
-			}
-		}
+        img {
+          height: 45px;
+          filter: invert(1);
+        }
+      }
 
-		&-theme-name {
-			display: flex;
-			align-items: center;
-			gap: 4px;
-			font-size: var(--font-s);
-			font-weight: 500;
-			color: var(--color-highlight);
-			white-space: nowrap;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			max-width: 200px;
+      &-titles {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
 
-			@media screen and (max-width: 768px) {
-				display: none;
-			}
+      &-theme-separator {
+        margin: 0 8px;
+        opacity: 0.5;
+        font-weight: 300;
 
-			@media screen and (max-width: 500px) {
-				font-size: var(--font-xs);
-				max-width: 120px;
-			}
-		}
+        @media screen and (max-width: 768px) {
+          display: none;
+        }
+      }
 
-		&-theme-icon {
-			font-family: var(--font-icon);
-			font-size: calc(var(--font-m) * var(--font-to-icon));
-			display: flex;
-			align-items: center;
-		}
+      &-theme-name {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--font-s);
+        font-weight: 500;
+        color: var(--color-highlight);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 200px;
+        transition: opacity 0.2s;
 
-		&-titles {
-			display: flex;
-			align-items: center;
-			gap: 4px;
-		}
+        @media screen and (max-width: 768px) {
+          max-width: 160px;
+          background: rgba(255, 255, 255, 0.08);
+          padding: 6px 10px;
+          border-radius: 8px;
+          cursor: pointer;
+          min-height: 36px;
+          
+          &:active {
+            opacity: 0.7;
+          }
+        }
 
-		&-header {
-			display: flex;
-			flex-direction: column;
-			align-items: flex-start;
-			gap: 0;
+        @media screen and (max-width: 480px) {
+          max-width: 120px;
+          font-size: 0.85rem;
+        }
+      }
 
-			h1 {
-				margin: 0;
-				line-height: 1;
-			}
+      &-theme-icon {
+        font-size: calc(var(--font-m) * var(--font-to-icon));
+        display: flex;
+        align-items: center;
+      }
 
-			h2 {
-				margin: 0;
-				line-height: 1;
-			}
-		}
-	}
+      &-theme-arrow {
+        font-size: 18px;
+        color: var(--color-highlight);
+        margin-left: 2px;
+        transition: transform 0.3s ease;
+      }
 
-	&-tabs {
-		display: flex;
-		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
-		pointer-events: auto;
+      &-name--active {
+        .navbar-theme-arrow {
+          transform: rotate(180deg);
+        }
+      }
+    }
 
-		a {
-			height: 59px;
-			display: flex;
-			align-items: center;
-			margin-left: var(--font-s);
-			transition: opacity 0.2s, border-bottom 0.2s;
-			border-bottom: solid 3px transparent;
+    &-tabs {
+      display: flex;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: auto;
 
-			&:hover {
-				opacity: 0.8;
-			}
-		}
+      a {
+        height: 59px;
+        display: flex;
+        align-items: center;
+        margin-left: var(--font-s);
+        transition: opacity 0.2s, border-bottom 0.2s;
+        border-bottom: solid 3px transparent;
 
-		.router-link-active {
-			border-bottom: solid 3px var(--color-highlight);
-			color: var(--color-highlight);
+        &:hover {
+          opacity: 0.8;
+        }
+      }
 
-			&:hover {
-				opacity: 1;
-			}
-		}
+      .router-link-active {
+        border-bottom: solid 3px var(--color-highlight);
+        color: var(--color-highlight);
 
-		// @media screen and (max-width: 750px) {
-		// 	display: none;
-		// }
-		// @media screen and (max-height: 500px) {
-		// 	display: none;
-		// }
-	}
+        &:hover {
+          opacity: 1;
+        }
+      }
 
-	&-user {
-		display: flex;
-		align-items: center;
+      @media screen and (max-width: 900px) {
+        display: none;
+      }
+    }
 
-		li a,
-		button {
-			display: flex;
-			align-items: center;
-			margin-right: var(--font-m);
-			padding: 2px 4px;
-			border-radius: 4px;
-			font-size: var(--font-m);
-			transition: background-color 0.25s;
-		}
+    &-user {
+      display: flex;
+      align-items: center;
 
-		span {
-			font-family: var(--font-icon);
-			font-size: calc(var(--font-l) * var(--font-to-icon));
-		}
+      li a,
+      button {
+        display: flex;
+        align-items: center;
+        margin-right: var(--font-m);
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-size: var(--font-m);
+        transition: background-color 0.25s;
+      }
 
-		&-user:hover ul,
-		&-info:hover ul {
-			display: block;
-			opacity: 1;
-		}
+      span {
+        font-family: var(--font-icon);
+        font-size: calc(var(--font-l) * var(--font-to-icon));
+      }
 
-		&-user,
-		&-info {
-			height: 60px;
-			min-width: 100px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
+      &-user:hover ul,
+      &-info:hover ul {
+        display: block;
+        opacity: 1;
+      }
 
-			@media screen and (max-width: 750px) {
-				display: none;
-			}
-			@media screen and (max-height: 500px) {
-				display: none;
-			}
+      &-user,
+      &-info {
+        height: 60px;
+        min-width: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
 
-			ul {
-				min-width: 100px;
-				display: none;
-				position: absolute;
-				right: 20px;
-				top: 55px;
-				padding: 8px;
-				border-radius: 5px;
-				background-color: rgb(85, 85, 85);
-				opacity: 0;
-				transition: opacity 0.25s;
-				z-index: 10;
+        @media screen and (max-width: 750px) {
+          display: none;
+        }
+        @media screen and (max-height: 500px) {
+          display: none;
+        }
 
-				li {
-					border-radius: 5px;
-					transition: background-color 0.25s;
+        ul {
+          min-width: 100px;
+          display: none;
+          position: absolute;
+          right: 20px;
+          top: 55px;
+          padding: 8px;
+          border-radius: 5px;
+          background-color: rgb(85, 85, 85);
+          opacity: 0;
+          transition: opacity 0.25s;
+          z-index: 10;
 
-					a,
-					button {
-						padding: 8px 6px;
-						width: 100%;
-						height: 100%;
-					}
-				}
+          li {
+            border-radius: 5px;
+            transition: background-color 0.25s;
 
-				li:hover {
-					background-color: var(--color-complement-text);
-				}
-			}
-		}
+            a,
+            button {
+              padding: 8px 6px;
+              width: 100%;
+              height: 100%;
+            }
+          }
 
-		&-info {
-			min-width: 0;
+          li:hover {
+            background-color: var(--color-complement-text);
+          }
+        }
+      }
 
-			ul {
-				right: 120px;
-				top: 55px;
-			}
+      &-info {
+        min-width: 0;
 
-			@media screen and (max-width: 750px) {
-				display: flex;
+        ul {
+          right: 120px;
+          top: 55px;
+        }
 
-				ul {
-					right: 20px;
-					top: 55px;
-				}
-			}
-			@media screen and (max-height: 500px) {
-				display: flex;
-			}
-		}
-	}
+        @media screen and (max-width: 750px) {
+          display: flex;
+
+          ul {
+            right: 20px;
+            top: 55px;
+          }
+        }
+        @media screen and (max-height: 500px) {
+          display: flex;
+        }
+      }
+    }
 }
 </style>

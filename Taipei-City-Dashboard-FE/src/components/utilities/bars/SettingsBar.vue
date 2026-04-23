@@ -49,13 +49,7 @@ function handleOpenSettings() {
     v-if="hasContent"
     class="settingsbar"
   >
-    <button
-      class="show-if-mobile"
-      @click="dialogStore.showDialog('mobileNavigation')"
-    >
-      <span class="settingsbar-title-navigation">arrow_drop_down_circle</span>
-    </button>
-    <MobileNavigation />
+    <!-- Mobile navigation moved to NavBar -->
     <div
       v-if="
         contentStore.personalDashboards
@@ -101,6 +95,10 @@ function handleOpenSettings() {
 	border-bottom: solid 1px var(--color-border);
 	user-select: none;
 	gap: 4px;
+
+	@media screen and (max-width: 768px) {
+		display: none !important;
+	}
 
 	span {
 		font-family: var(--font-icon);

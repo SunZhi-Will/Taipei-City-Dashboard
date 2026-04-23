@@ -181,17 +181,20 @@ onMounted(() => {
 	z-index: 10;
 
 	&-dialog {
-		width: fit-content;
-		height: fit-content;
+		width: 200px;
+		height: auto;
 		position: absolute;
-		top: 110px;
-		left: 45px;
-		padding: var(--font-m);
-		border: solid 1px var(--color-border);
-		border-radius: 5px;
-		background-color: rgb(30, 30, 30);
+		top: 100px;
+		left: 20px;
+		padding: 20px;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 12px;
+		background: rgba(35, 35, 35, 0.9);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 		transform: translateY(0);
 		z-index: 2;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 	}
 
 	&-background {

@@ -16,6 +16,7 @@ import (
 // AIChatInput matches the Request Schema in specification。https://docs.twcloud.ai/docs/user-guides/twcc/afs/api-and-parameters/api-parameter-information#模型說明
 type AIChatInput struct {
 	SessionID string `json:"session"`
+	AppMode   string `json:"app_mode"` // e.g. "ai_studio"
 	Stream    bool   `json:"stream"`
 	Messages  []struct {
 		Role      string `json:"role" binding:"required,oneof=system user assistant tool"`
@@ -71,6 +72,7 @@ func ChatWithTWCC(c *gin.Context) {
 	_, accountID, _, _, _ := util.GetUserInfoFromContext(c)
 	req := ai.AIChatRequest{
 		SessionID: sessionID,
+		AppMode:   input.AppMode,
 		UserID:    fmt.Sprintf("%d", accountID),
 		IPAddress: c.ClientIP(),
 		Messages:  input.ToServiceMessages(),

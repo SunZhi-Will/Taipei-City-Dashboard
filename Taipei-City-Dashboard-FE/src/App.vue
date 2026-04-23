@@ -158,6 +158,21 @@ function reload3DMRTMapData() {
 	});
 }
 
+const navItems = [
+  { name: "儀表板", icon: "dashboard", path: "/dashboard", id: "dashboard" },
+  { name: "地圖", icon: "map", path: "/mapview", id: "mapview" },
+  { name: "組件", icon: "widgets", path: "/component", id: "component", auth: true },
+  { name: "AI", icon: "psychology", path: "/ai-studio", id: "ai-studio" }
+];
+
+const filteredNavItems = computed(() => {
+  return navItems.filter(item => !item.auth || authStore.token);
+});
+
+const isNavItemActive = (itemId) => {
+  return authStore.currentPath.includes(itemId);
+};
+
 (watch(
 	() => route.query,
 	(query) => {
@@ -208,7 +223,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-container">
+  <div
+    class="app-container"
+    :class="{ 'is-mobile': authStore.isNarrowDevice }"
+  >
     <NotificationBar />
     <NavBar
       v-if="
@@ -216,63 +234,71 @@ onBeforeUnmount(() => {
           authStore.currentPath !== 'mapview'
       "
     />
-    <!-- /mapview standalone fullscreen layout -->
-    <div
-      v-if="authStore.currentPath === 'mapview'"
-      class="app-mapview-layout"
-    >
-      <RouterView />
-    </div>
-    <!-- /mapview, /dashboard layouts -->
-    <div
-      v-else-if="authStore.currentPath === 'dashboard'"
-      class="app-content"
-    >
-      <SideBar />
-      <div class="app-content-main">
-        <SettingsBar />
-        <div class="app-content-body">
-          <RouterView />
+    
+    <!-- Content wrapper -->
+    <div class="app-viewport">
+      <!-- /mapview standalone fullscreen layout -->
+      <div
+        v-if="authStore.currentPath === 'mapview'"
+        class="app-mapview-layout"
+      >
+        <RouterView />
+      </div>
+
+      <!-- /dashboard, /admin, /component layouts -->
+      <div
+        v-else-if="['dashboard', 'admin'].includes(authStore.currentPath) || authStore.currentPath.includes('component')"
+        class="app-content"
+      >
+        <SideBar v-if="authStore.currentPath === 'dashboard'" />
+        <AdminSideBar v-else-if="authStore.currentPath === 'admin'" />
+        <ComponentSideBar v-else-if="authStore.currentPath.includes('component')" />
+
+        <div class="app-content-main">
+          <SettingsBar v-if="authStore.currentPath === 'dashboard'" />
+          <div
+            class="app-content-body"
+            :class="{ 'app-content-body--flush': authStore.currentPath === 'ai-studio' }"
+          >
+            <RouterView />
+          </div>
         </div>
       </div>
-    </div>
-    <!-- /admin layouts -->
-    <div
-      v-else-if="authStore.currentPath === 'admin'"
-      class="app-content"
-    >
-      <AdminSideBar />
-      <div class="app-content-main">
-        <div class="app-content-body">
-          <RouterView />
+
+      <!-- AI Studio layout -->
+      <div
+        v-else-if="authStore.currentPath === 'ai-studio'"
+        class="app-content"
+      >
+        <div class="app-content-main">
+          <div class="app-content-body app-content-body--flush">
+            <RouterView />
+          </div>
         </div>
       </div>
-    </div>
-    <!-- /component, /component/:index layouts -->
-    <div
-      v-else-if="authStore.currentPath.includes('component')"
-      class="app-content"
-    >
-      <ComponentSideBar />
-      <div class="app-content-main">
-        <div class="app-content-body">
-          <RouterView />
-        </div>
+
+      <div v-else>
+        <router-view />
       </div>
     </div>
-    <div
-      v-else-if="authStore.currentPath === 'ai-studio'"
-      class="app-content"
+
+    <!-- Bottom Nav for Mobile -->
+    <nav 
+      v-if="authStore.isNarrowDevice && authStore.currentPath !== 'embed'"
+      class="app-bottom-nav"
     >
-      <div class="app-content-main">
-        <div class="app-content-body app-content-body--flush">
-          <RouterView />
-        </div>
-      </div>
-    </div>
-    <div v-else>
-      <router-view />
-    </div>
+      <router-link
+        v-for="item in filteredNavItems"
+        :key="item.id"
+        :to="item.path"
+        class="app-bottom-nav-item"
+        :class="{ 'is-active': isNavItemActive(item.id) }"
+      >
+        <span class="app-bottom-nav-icon">{{ item.icon }}</span>
+        <span class="app-bottom-nav-label">{{ item.name }}</span>
+      </router-link>
+    </nav>
+
     <InitialWarning />
     <LogIn />
     <ChatWidgetMount v-if="shouldShowChatWidget" />
@@ -281,76 +307,110 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 .app {
-	&-mapview-layout {
+	&-container {
+		display: flex;
+		flex-direction: column;
 		width: 100vw;
-		height: calc(100vh);
+		height: 100vh;
 		height: calc(var(--vh) * 100);
+		overflow: hidden;
+		background-color: var(--color-background);
 	}
 
-	&-container {
-		max-width: 100vw;
-		max-height: 100vh;
-		max-height: calc(var(--vh) * 100);
+	&-viewport {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	&-mapview-layout {
+		width: 100%;
+		height: 100%;
 	}
 
 	&-content {
-		width: 100vw;
-		max-width: 100vw;
-		height: calc(100vh - 60px);
-		height: calc(var(--vh) * 100 - 60px);
+		flex: 1;
 		display: flex;
+		min-height: 0;
+		width: 100%;
 
 		&-main {
-			width: 100%;
+			flex: 1;
 			display: flex;
 			flex-direction: column;
+			min-width: 0;
 			height: 100%;
-			min-height: 0;
-			padding-top: 0;
-			padding-bottom: 0;
-			box-sizing: border-box;
-
-			> * {
-				margin-top: 0;
-				margin-bottom: 0;
-			}
 		}
 
 		&-body {
 			flex: 1;
-			min-height: 0;
-			height: 100%;
-			padding-bottom: var(--font-m);
-			margin-bottom: 0;
 			overflow-y: auto;
+			overflow-x: hidden;
+			-webkit-overflow-scrolling: touch;
+			padding-bottom: 2rem;
 
 			&--flush {
-				padding-bottom: 0;
-			}
-
-			> * {
-				margin-bottom: 0;
-				padding-bottom: 0;
+				padding: 0;
 			}
 		}
 	}
 
-	&-update {
-		position: fixed;
-		bottom: 0;
-		right: 20px;
-		color: white;
-		opacity: 0.3;
-		transition: opacity 0.3s;
-		user-select: none;
+  /* Integrated Bottom Nav Styles */
+  &-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 70px;
+    background-color: var(--color-component-background);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.2);
 
-		p {
-			color: var(--color-complement-text);
-		}
+    &-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-complement-text);
+      text-decoration: none;
+      flex: 1;
+      height: 100%;
+      transition: var(--transition-fast);
 
-		&:hover {
-			opacity: 1;
-		}
+      &.is-active {
+        color: var(--color-highlight);
+        
+        .app-bottom-nav-icon {
+          transform: translateY(-2px);
+        }
+      }
+    }
+
+    &-icon {
+      font-family: var(--font-icon);
+      font-size: 24px;
+      margin-bottom: 4px;
+      transition: transform 0.2s ease;
+    }
+
+    &-label {
+      font-size: var(--font-xs);
+      font-weight: 500;
+    }
+  }
+}
+
+/* Mobile specific overrides */
+.is-mobile {
+	.app-content-body {
+		padding-bottom: 80px; /* Extra padding for bottom nav */
 	}
 }
 </style>

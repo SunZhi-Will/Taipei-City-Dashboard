@@ -63,10 +63,10 @@ services:
       GIN_MODE: ${GIN_MODE}
       GIN_DOMAIN: ${GIN_DOMAIN}
       GIN_PORT: ${GIN_PORT:-8080}
-      HOME: /home/appuser
-      GOPATH: /home/appuser/go
-      GOMODCACHE: /home/appuser/go/pkg/mod
-      GOCACHE: /home/appuser/.cache/go-build
+      HOME: /tmp
+      GOPATH: /tmp/go
+      GOMODCACHE: /tmp/go/pkg/mod
+      GOCACHE: /tmp/go/cache
       JWT_SECRET: ${JWT_SECRET}
       IDNO_SALT: ${IDNO_SALT}
       ISSO_CLIENT_ID: ${ISSO_CLIENT_ID}

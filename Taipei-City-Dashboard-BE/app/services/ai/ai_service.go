@@ -35,6 +35,7 @@ func init() {
 
 type AIChatRequest struct {
 	SessionID string                 `json:"session"`
+	AppMode   string                 `json:"app_mode"`
 	UserID    string                 `json:"user_id"`
 	IPAddress string                 `json:"ip_address"`
 	Messages  []llms.MessageContent  `json:"messages"`
@@ -210,6 +211,10 @@ func (s *aiSession) injectInstructions() {
 	}
 
 	instruction := fmt.Sprintf("\nSystem Instruction:\n1. Use ONLY: [%s].\n2. NEVER nest tool calls \n3. Arguments MUST be literal values (strings, integers, etc.), never function calls \n4. For dependent tasks, call tools sequentially in separate turns.\n5. If stuck, respond with text.", toolNames)
+	
+	if s.req.AppMode == "ai_studio" {
+		instruction += "\n6. Context: AI STUDIO. 優先推薦圖表且回覆要簡潔流暢，避免長篇大論，因為你的回覆將作為大螢幕輪播場景的前導介紹。"
+	}
 	
 	s.currentMessages = make([]llms.MessageContent, 0)
 	merged := false

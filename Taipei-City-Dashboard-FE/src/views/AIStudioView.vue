@@ -68,6 +68,11 @@ watch(
 	(nextValue) => {
 		if (!nextValue) return;
 		aiStudioStore.ingestChatResult(nextValue);
+		
+		// 如果 ingestion 後產生了 slides，自動切換至 presentation 模式
+		if (Array.isArray(scene.value?.presentation?.slides) && scene.value.presentation.slides.length > 0) {
+			aiStudioStore.setRightMode("presentation");
+		}
 	},
 	{ immediate: true },
 );
@@ -371,6 +376,15 @@ $left-w: 360px;
 	&--collapsed {
 		width: 48px;
 		min-width: 48px;
+
+		.aistudio-left-header {
+			padding: 0;
+			justify-content: center;
+		}
+
+		.aistudio-left-actions {
+			margin-left: 0;
+		}
 	}
 }
 

@@ -76,7 +76,7 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 
 		try {
 			if (USE_TWAI_CHAT) {
-				const twaiResult = await queryByTwai(newChatData.content, chatData.value);
+				const twaiResult = await queryByTwai(newChatData.content, chatData.value, { appMode: 'ai_studio' });
 				if (twaiResult?.ok) {
 					let components = componentsFromAgentResult(twaiResult.agentResult);
 					if (components.length > 0) {
@@ -114,7 +114,7 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 							newChatData.content,
 							twaiResult.content,
 							components,
-							components.length > 0 ? 'components' : 'web',
+							components.length > 0 ? 'presentation' : 'web',
 						),
 						components: components.length > 0 ? components : undefined,
 					});
@@ -202,7 +202,7 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 				button: [{ id: 1, text: '建立儀表板' }],
 				content: `您好 😊 \n 以下是根據您的問題，自動為您推薦的「組件清單」。您可以將這些組件整批加入「個人儀表板」，方便日後快速查看與使用。\n`,
 				relations: topK,
-				scene: resolveSceneFromAI(question, '', topK, 'components'),
+				scene: resolveSceneFromAI(question, '', topK, 'presentation'),
 			});
 			chatData.value.push({
 				id: chatData.value.length + 1,

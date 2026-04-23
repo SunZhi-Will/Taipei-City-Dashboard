@@ -589,17 +589,18 @@ button:hover {
 }
 
 .dashboardcomponent {
-	height: 330px;
-	max-height: 330px;
-	width: calc(100% - var(--font-m) * 2);
-	max-width: calc(100% - var(--font-m) * 2);
+	min-height: 330px;
+	height: auto;
+	width: 100%;
 	display: flex;
 	flex-direction: column;
 	justify-content: space-between;
 	position: relative;
-	padding: var(--font-m);
-	border-radius: 5px;
+	padding: 16px;
+	border-radius: 8px;
 	background-color: var(--color-component-background);
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+	transition: var(--transition-normal);
 
 	@media (min-width: 1050px) {
 		height: 370px;

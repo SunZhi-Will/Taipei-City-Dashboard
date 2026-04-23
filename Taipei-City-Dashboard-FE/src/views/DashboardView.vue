@@ -315,9 +315,14 @@ function handleMoreInfo(item) {
 <style scoped lang="scss">
 .dashboard {
 	display: grid;
-	row-gap: var(--font-s);
-	column-gap: var(--font-s);
-  margin: var(--font-m) var(--font-m) var(--font-m) var(--font-m);
+	row-gap: 12px;
+	column-gap: 12px;
+  margin: var(--font-m);
+
+	@media (max-width: 768px) {
+		margin: 12px;
+		row-gap: 16px;
+	}
 
 	@media (min-width: 720px) {
 		grid-template-columns: 1fr 1fr;

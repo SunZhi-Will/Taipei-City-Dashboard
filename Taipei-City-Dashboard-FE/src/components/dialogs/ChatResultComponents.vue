@@ -81,22 +81,18 @@ const onOpenMap = (comp) => {
         </button>
       </div>
 
-      <div
+      <DashboardComponent
         v-else-if="isDashboardPreview(primaryComponent)"
-        class="dashboard-focus-card"
-      >
-        <DashboardComponent
-          :config="primaryComponent.dashboardConfig"
-          mode="default"
-          :show-index="false"
-          :city-tag="cityTags(primaryComponent.dashboardConfig)"
-          :info-btn="false"
-          :add-btn="false"
-          :favorite-btn="false"
-          :footer="false"
-          :fullscreen-btn="false"
-        />
-      </div>
+        :config="primaryComponent.dashboardConfig"
+        mode="default"
+        :show-index="false"
+        :city-tag="cityTags(primaryComponent.dashboardConfig)"
+        :info-btn="false"
+        :add-btn="false"
+        :favorite-btn="false"
+        :footer="false"
+        :fullscreen-btn="false"
+      />
 
       <div
         v-else
@@ -151,14 +147,6 @@ const onOpenMap = (comp) => {
 	overflow: hidden;
 }
 
-.dashboard-focus-card {
-	background: rgba(255, 255, 255, 0.03);
-	border: 1px solid rgba(255, 255, 255, 0.12);
-	border-radius: 10px;
-	padding: 8px;
-	max-height: 300px;
-	overflow: hidden;
-}
 
 .map-focus-card {
 	background: rgba(16, 185, 129, 0.08);

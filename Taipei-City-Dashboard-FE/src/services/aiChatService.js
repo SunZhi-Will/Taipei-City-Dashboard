@@ -365,7 +365,7 @@ export const buildFallbackScene = (question = '', components = [], preferredMode
 			},
 			audience: 'public-screen',
 			industry,
-			slides: rightMode === 'presentation' ? buildPresentationSlides() : [],
+			slides: (rightMode === 'presentation' || safeComponents.length > 0) ? buildPresentationSlides() : [],
 		},
 		blocks: safeComponents.map((item) => ({
 			type: 'component',
@@ -445,7 +445,7 @@ export const buildTwaiMessages = (latestUserInput, chatHistory = [], includeHist
 	];
 };
 
-export const queryByTwai = async (question, chatHistory = []) => {
+export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 	const shouldRetry = (error) => {
 		const status = error?.response?.status;
 		if (!status) return true;
@@ -459,6 +459,7 @@ export const queryByTwai = async (question, chatHistory = []) => {
 			const d = new Date();
 			return `session_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 		})(),
+		app_mode: options.appMode || '',
 		stream: false,
 		messages: buildTwaiMessages(question, chatHistory, includeHistory),
 		max_new_tokens: includeHistory ? 512 : 256,
