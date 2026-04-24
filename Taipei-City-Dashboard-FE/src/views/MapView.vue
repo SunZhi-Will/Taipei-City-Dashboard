@@ -9,6 +9,7 @@ import { useAuthStore } from "../store/authStore";
 import { useMapStore } from "../store/mapStore";
 import MapContainer from "../components/map/MapContainer.vue";
 import MapLayerSidebar from "../components/map/MapLayerSidebar.vue";
+import MapAnalysisPanel from "../components/map/MapAnalysisPanel.vue";
 import MoreInfo from "../components/dialogs/MoreInfo.vue";
 import ReportIssue from "../components/dialogs/ReportIssue.vue";
 
@@ -20,6 +21,7 @@ const route = useRoute();
 const router = useRouter();
 
 const islandCollapsed = ref(false);
+const selectedAnalysisComponent = ref(null);
 
 const dashboardRoute = computed(() => {
 	const nextQuery = {};
@@ -93,6 +95,25 @@ function handleSwitchDashboard({ scope, dashboard, city }) {
 	}
 }
 
+function handleOpenAnalysis({ component }) {
+	selectedAnalysisComponent.value = component || null;
+}
+
+function handleCloseAnalysisByToggle({ component }) {
+	if (!component) {
+		selectedAnalysisComponent.value = null;
+		return;
+	}
+
+	if (String(selectedAnalysisComponent.value?.id || "") === String(component.id || "")) {
+		selectedAnalysisComponent.value = null;
+	}
+}
+
+function handleCloseAnalysis() {
+	selectedAnalysisComponent.value = null;
+}
+
 onMounted(() => {
 	// Initialize map
 });
@@ -147,7 +168,15 @@ onBeforeUnmount(() => {
       :is-collapsed="islandCollapsed"
       @update:is-collapsed="islandCollapsed = $event"
       @switch-dashboard="handleSwitchDashboard"
+			@open-analysis="handleOpenAnalysis"
+			@close-analysis="handleCloseAnalysisByToggle"
     />
+
+		<MapAnalysisPanel
+	  v-if="selectedAnalysisComponent"
+	  :component="selectedAnalysisComponent"
+	  @close="handleCloseAnalysis"
+	/>
 
     <!-- Dialogs -->
     <MoreInfo />
@@ -220,11 +249,20 @@ onBeforeUnmount(() => {
 	text-decoration: none;
 	font-size: 0.75rem;
 	border-radius: 16px;
-	transition: background 0.2s ease;
+	position: relative;
+	transition: background 0.2s ease, color 0.2s ease;
 
 	&:hover {
 		background: rgba(255, 255, 255, 0.1);
 	}
+}
+
+.map-nav-link.router-link-active,
+.map-nav-link.router-link-exact-active {
+	background: rgba(255, 255, 255, 0.22);
+	color: #ffffff;
+	font-weight: 600;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 
 </style>

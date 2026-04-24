@@ -1,19 +1,22 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
+import { useRoute, useRouter } from "vue-router";
 import AIStudioChatPanel from "../components/ai-studio/AIStudioChatPanel.vue";
 import AIStudioPresentationCanvas from "../components/ai-studio/AIStudioPresentationCanvas.vue";
 import DashboardComponent from "../dashboardComponent/DashboardComponent.vue";
 import MapContainer from "../components/map/MapContainer.vue";
-import { useChatStore } from "../store/chatStore";
+import { useAiStudioChatStore } from "../store/aiStudioChatStore";
 import { useContentStore } from "../store/contentStore";
 import { useAIStudioStore } from "../store/aiStudioStore";
 import { useMapStore } from "../store/mapStore";
 
-const chatStore = useChatStore();
+const chatStore = useAiStudioChatStore();
 const contentStore = useContentStore();
 const aiStudioStore = useAIStudioStore();
 const mapStore = useMapStore();
+const route = useRoute();
+const router = useRouter();
 
 const { chatData } = storeToRefs(chatStore);
 const { scene } = storeToRefs(aiStudioStore);
@@ -25,6 +28,8 @@ const clearChatConfirm = () => {
 	}
 };
 const showSceneJson = ref(false);
+const immersiveUiVisible = ref(false);
+let immersiveUiTimer = null;
 
 const lastBotMessage = computed(() => {
 	const list = [...chatData.value];
@@ -51,10 +56,29 @@ const sceneBlocks = computed(() => {
 
 const selectedMode = computed(() => scene.value?.layout?.rightPanel?.mode || "components");
 
+const isImmersive = computed(() => route.query.fullscreen === "1");
+
+const selectedModeLabel = computed(() => {
+	const modeLabelMap = {
+		presentation: "輪播展示",
+		components: "圖表牆",
+		map: "地圖",
+	};
+
+	return modeLabelMap[selectedMode.value] || "AI Studio";
+});
+
 const componentCards = computed(() => {
 	if (!latestComponents.value.length) return [];
 	return latestComponents.value.filter((item) => item?.dashboardConfig);
 });
+
+const hasMapComponents = computed(() =>
+	componentCards.value.some((item) => {
+		const mapConfig = item?.dashboardConfig?.map_config;
+		return Array.isArray(mapConfig) && mapConfig.length > 0 && Boolean(mapConfig[0]);
+	}),
+);
 
 const hasSceneContent = computed(() => {
 	const slidesLength = Array.isArray(scene.value?.presentation?.slides)
@@ -62,6 +86,49 @@ const hasSceneContent = computed(() => {
 		: 0;
 	return sceneBlocks.value.length > 0 || componentCards.value.length > 0 || slidesLength > 0;
 });
+
+const componentCardHeight = computed(() =>
+	isImmersive.value ? "min(52vh, 560px)" : "clamp(260px, 36vh, 460px)",
+);
+
+const triggerCanvasResize = () => {
+	nextTick(() => {
+		requestAnimationFrame(() => {
+			window.dispatchEvent(new Event("resize"));
+			if (mapStore.map?.resize) {
+				mapStore.map.resize();
+			}
+		});
+	});
+};
+
+const setImmersiveMode = (nextValue) => {
+	const nextQuery = { ...route.query };
+
+	if (nextValue) {
+		nextQuery.fullscreen = "1";
+	} else {
+		delete nextQuery.fullscreen;
+	}
+
+	router.replace({ query: nextQuery });
+};
+
+const clearImmersiveUiTimer = () => {
+	if (immersiveUiTimer) {
+		clearTimeout(immersiveUiTimer);
+		immersiveUiTimer = null;
+	}
+};
+
+const handleImmersiveMouseMove = () => {
+	if (!isImmersive.value) return;
+	immersiveUiVisible.value = true;
+	clearImmersiveUiTimer();
+	immersiveUiTimer = setTimeout(() => {
+		immersiveUiVisible.value = false;
+	}, 1500);
+};
 
 watch(
 	lastBotMessage,
@@ -77,64 +144,40 @@ watch(
 	{ immediate: true },
 );
 
+watch([selectedMode, isImmersive, () => componentCards.value.length], () => {
+	triggerCanvasResize();
+}, { flush: "post" });
+
+watch(isImmersive, (nextValue) => {
+	if (nextValue) {
+		immersiveUiVisible.value = true;
+		handleImmersiveMouseMove();
+		return;
+	}
+	immersiveUiVisible.value = false;
+	clearImmersiveUiTimer();
+});
+
 onBeforeUnmount(() => {
+	clearImmersiveUiTimer();
 	mapStore.destroyMapBox();
 });
 </script>
 
 <template>
-  <div class="aistudio">
-    <!-- ── LEFT PANEL ── -->
-    <aside
-      class="aistudio-left"
-      :class="{ 'aistudio-left--collapsed': scene.layout.leftPanel.collapsed }"
-    >
-      <!-- header -->
-      <div class="aistudio-left-header">
-        <span
-          v-if="!scene.layout.leftPanel.collapsed"
-          class="aistudio-left-title"
-        >
-          <span class="icon">smart_toy</span>AI Studio
-        </span>
-        <div class="aistudio-left-actions">
-          <button
-            v-if="!scene.layout.leftPanel.collapsed"
-            class="icon-btn"
-            title="清除聊天紀錄"
-            @click="clearChatConfirm"
-          >
-            <span class="icon">delete_sweep</span>
-          </button>
-          <button
-            class="icon-btn"
-            :title="scene.layout.leftPanel.collapsed ? '展開面板' : '收合面板'"
-            @click="aiStudioStore.toggleLeftPanel()"
-          >
-            <span class="icon">{{
-              scene.layout.leftPanel.collapsed
-                ? "keyboard_double_arrow_right"
-                : "keyboard_double_arrow_left"
-            }}</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- body: hidden when collapsed -->
-      <div
-        v-if="!scene.layout.leftPanel.collapsed"
-        class="aistudio-left-body"
-      >
-        <!-- Chat -->
-        <div class="chat-panel">
-          <AIStudioChatPanel />
-        </div>
-      </div>
-    </aside>
-
+	<div
+		class="aistudio"
+		:class="{ 'aistudio--immersive': isImmersive }"
+	>
     <!-- ── RIGHT PANEL ── -->
-    <section class="aistudio-right">
-      <div class="aistudio-toolbar">
+		<section
+			class="aistudio-right"
+			:class="{ 'aistudio-right--immersive': isImmersive }"
+		>
+			<div
+				v-if="!isImmersive"
+				class="aistudio-toolbar"
+			>
         <div class="mode-switch">
           <button
             class="mode-btn"
@@ -162,6 +205,13 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <div class="toolbar-actions">
+					<button
+						class="icon-btn"
+						:title="`全螢幕觀看${selectedModeLabel}`"
+						@click="setImmersiveMode(true)"
+					>
+						<span class="icon">open_in_full</span>
+					</button>
           <button
             class="icon-btn"
             :title="showSceneJson ? '隱藏 Scene JSON' : '顯示 Scene JSON'"
@@ -175,19 +225,46 @@ onBeforeUnmount(() => {
       <!-- canvas area -->
       <div
         class="aistudio-canvas"
-        :class="{ 'aistudio-canvas--with-json': showSceneJson }"
+				:class="{
+					'aistudio-canvas--with-json': showSceneJson && !isImmersive,
+					'aistudio-canvas--immersive': isImmersive,
+				}"
+				@mousemove="handleImmersiveMouseMove"
       >
+				<div
+					v-if="isImmersive"
+					class="immersive-overlay"
+					:class="{ 'immersive-overlay--visible': immersiveUiVisible }"
+				>
+					<span
+						v-if="selectedMode !== 'presentation'"
+						class="immersive-badge"
+					>{{ selectedModeLabel }}</span>
+					<button
+						class="icon-btn immersive-exit"
+						title="離開全螢幕"
+						@click="setImmersiveMode(false)"
+					>
+						<span class="icon">close_fullscreen</span>
+					</button>
+				</div>
+
         <!-- canvas body -->
-        <div class="canvas-body">
-          <div
-            v-if="selectedMode === 'presentation'"
-            class="canvas-inner canvas-inner--presentation"
-          >
+				<div
+					class="canvas-body"
+					:class="{ 'canvas-body--immersive': isImmersive }"
+				>
+				<div
+					v-show="selectedMode === 'presentation'"
+					class="canvas-inner canvas-inner--presentation"
+					:class="{ 'canvas-inner--immersive': isImmersive }"
+				>
             <AIStudioPresentationCanvas
               v-if="hasSceneContent"
               :scene="scene"
               :components="componentCards"
               :city-manager="contentStore.cityManager"
+						:is-immersive="isImmersive"
             />
             <div
               v-else
@@ -202,16 +279,17 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- components mode -->
-          <div
-            v-else-if="selectedMode === 'components'"
-            class="canvas-inner"
-          >
+				<div
+					v-show="selectedMode === 'components'"
+					class="canvas-inner"
+					:class="{ 'canvas-inner--immersive': isImmersive }"
+				>
             <div
               v-if="componentCards.length === 0"
               class="canvas-empty"
             >
               <span class="icon canvas-empty-icon">smart_toy</span>
-              <p>透過左側 AI 對話取得推薦組件</p>
+              <p>透過右側 AI 對話取得推薦組件</p>
               <p class="canvas-empty-sub">
                 組件將自動渲染至此畫布
               </p>
@@ -229,30 +307,32 @@ onBeforeUnmount(() => {
                   :config="item.dashboardConfig"
                   :active-city="item.city || item.dashboardConfig.city"
                   :city-tag="contentStore.cityManager.getTagList(item.city || item.dashboardConfig.city)"
-                  :style="{ height: '320px', width: '100%' }"
+									:style="{ height: componentCardHeight, width: '100%' }"
                 />
               </div>
             </div>
           </div>
 
           <!-- map mode -->
-          <div
-            v-else-if="selectedMode === 'map'"
-            class="canvas-inner canvas-inner--map"
-          >
-            <MapContainer v-if="mapStore.map" />
-            <div v-else class="canvas-empty">
+				<div
+					v-show="selectedMode === 'map'"
+					class="canvas-inner canvas-inner--map"
+					:class="{ 'canvas-inner--immersive': isImmersive }"
+				>
+					<MapContainer v-if="hasMapComponents" />
+					<div v-else class="canvas-empty">
               <span class="icon canvas-empty-icon">map</span>
-              <p>請先前往地圖頁以初始化地圖資源</p>
-              <p class="canvas-empty-sub">初始化後回到此頁即可在此顯示</p>
+						<p>目前推薦內容沒有可顯示的地圖圖層</p>
+						<p class="canvas-empty-sub">可先請 AI 推薦包含地圖圖層的組件</p>
             </div>
           </div>
 
           <!-- web mode -->
-          <div
-            v-else
-            class="canvas-inner canvas-inner--web"
-          >
+				<div
+					v-show="selectedMode === 'web'"
+					class="canvas-inner canvas-inner--web"
+					:class="{ 'canvas-inner--immersive': isImmersive }"
+				>
             <iframe
               :title="`web-preview-${webUrlInput}`"
               :src="webUrlInput"
@@ -262,7 +342,7 @@ onBeforeUnmount(() => {
 
         <!-- scene json drawer -->
         <div
-          v-if="showSceneJson"
+					v-if="showSceneJson && !isImmersive"
           class="scene-json-drawer scrollbar-custom"
         >
           <div class="scene-json-header">
@@ -278,6 +358,55 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </section>
+
+    <!-- ── CHAT PANEL (right) ── -->
+    <aside
+			v-if="!isImmersive"
+      class="aistudio-left"
+      :class="{ 'aistudio-left--collapsed': scene.layout.leftPanel.collapsed }"
+    >
+      <!-- header -->
+      <div class="aistudio-left-header">
+        <span
+          v-if="!scene.layout.leftPanel.collapsed"
+          class="aistudio-left-title"
+        >
+          AI Studio
+        </span>
+        <div class="aistudio-left-actions">
+          <button
+            v-if="!scene.layout.leftPanel.collapsed"
+            class="icon-btn"
+            title="清除聊天紀錄"
+            @click="clearChatConfirm"
+          >
+            <span class="icon">delete_sweep</span>
+          </button>
+          <button
+            class="icon-btn"
+            :title="scene.layout.leftPanel.collapsed ? '展開面板' : '收合面板'"
+            @click="aiStudioStore.toggleLeftPanel()"
+          >
+            <span class="icon">{{
+              scene.layout.leftPanel.collapsed
+                ? "keyboard_double_arrow_left"
+                : "keyboard_double_arrow_right"
+            }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- body: hidden when collapsed -->
+      <div
+        v-if="!scene.layout.leftPanel.collapsed"
+        class="aistudio-left-body"
+      >
+        <!-- Chat -->
+        <div class="chat-panel">
+          <AIStudioChatPanel />
+        </div>
+      </div>
+    </aside>
   </div>
 </template>
 
@@ -303,6 +432,10 @@ $left-w: 360px;
 	height: 100%;
 	background: $bg;
 	overflow: hidden;
+
+	&--immersive {
+		background: #050b14;
+	}
 }
 
 /* ── Icon shorthand ──────────────────────────────────────────── */
@@ -366,16 +499,15 @@ $left-w: 360px;
 	display: flex;
 	flex-direction: column;
 	width: $left-w;
-	min-width: $left-w;
+	min-width: 0;
 	background: $sidebar-bg;
-	border-right: 1px solid $sidebar-border;
-	transition: border-color $transition;
+	border-left: 1px solid $sidebar-border;
+	transition: width $transition, min-width $transition, border-color $transition;
 	overflow: hidden;
 	flex-shrink: 0;
 
 	&--collapsed {
 		width: 48px;
-		min-width: 48px;
 
 		.aistudio-left-header {
 			padding: 0;
@@ -397,6 +529,8 @@ $left-w: 360px;
 	border-bottom: 1px solid $sidebar-border;
 	flex-shrink: 0;
 	gap: 8px;
+	overflow: hidden;
+	white-space: nowrap;
 }
 
 .aistudio-left-actions {
@@ -404,6 +538,7 @@ $left-w: 360px;
 	align-items: center;
 	gap: 6px;
 	margin-left: auto;
+	flex-shrink: 0;
 }
 
 .aistudio-left-title {
@@ -446,6 +581,10 @@ $left-w: 360px;
 	flex-direction: column;
 	background: $bg;
 	overflow: hidden;
+
+	&--immersive {
+		background: #050b14;
+	}
 }
 
 /* ── Toolbar ─────────────────────────────────────────────────── */
@@ -504,31 +643,92 @@ $left-w: 360px;
 .aistudio-canvas {
 	flex: 1;
 	min-height: 0;
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-rows: minmax(0, 1fr);
 	overflow: hidden;
 	position: relative;
 
 	/* web url bar */
 	&--with-json {
-		.canvas-body {
-			flex: 1;
-		}
+		grid-template-rows: minmax(0, 1fr) 220px;
+	}
+
+	&--immersive {
+		background:
+			radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 32%),
+			linear-gradient(180deg, rgba(5, 11, 20, 0.98) 0%, rgba(5, 11, 20, 1) 100%);
+	}
+}
+
+.immersive-overlay {
+	position: absolute;
+	top: 16px;
+	right: 16px;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+	pointer-events: none;
+
+	&--visible {
+		opacity: 1;
+	}
+}
+
+.immersive-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 12px;
+	border: 1px solid rgba(148, 163, 184, 0.22);
+	border-radius: 999px;
+	background: rgba(15, 23, 42, 0.72);
+	backdrop-filter: blur(10px);
+	color: #e2e8f0;
+	font-size: var(--font-s);
+	letter-spacing: 0.04em;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+	pointer-events: auto;
+}
+
+.immersive-exit {
+	width: 40px;
+	height: 40px;
+	border: 1px solid rgba(148, 163, 184, 0.22);
+	border-radius: 999px;
+	background: rgba(15, 23, 42, 0.72);
+	backdrop-filter: blur(10px);
+	color: #e2e8f0;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+	pointer-events: auto;
+
+	&:hover {
+		background: rgba(30, 41, 59, 0.92);
+		color: #fff;
 	}
 }
 
 .canvas-body {
-	flex: 1;
+	height: 100%;
 	min-height: 0;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+
+	&--immersive {
+		padding: 0;
+	}
 }
 
 .canvas-inner {
 	flex: 1;
 	min-height: 0;
 	overflow: auto;
+
+	&--immersive {
+		height: 100%;
+	}
 
 	&--map {
 		overflow: hidden;
@@ -583,6 +783,7 @@ $left-w: 360px;
 	gap: 14px;
 	padding: 14px;
 	align-content: start;
+	min-height: 100%;
 }
 
 .component-card-wrap {
@@ -593,7 +794,7 @@ $left-w: 360px;
 /* ── Scene JSON drawer ───────────────────────────────────────── */
 .scene-json-drawer {
 	flex-shrink: 0;
-	height: 220px;
+	height: 100%;
 	min-height: 0;
 	border-top: 1px solid $border;
 	display: flex;
@@ -634,5 +835,17 @@ $left-w: 360px;
 	&::-webkit-scrollbar { width: 4px; height: 4px; }
 	&::-webkit-scrollbar-track { background: transparent; }
 	&::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+}
+
+@media (max-width: 960px) {
+	.immersive-overlay {
+		top: 12px;
+		right: 12px;
+		gap: 8px;
+	}
+
+	.immersive-badge {
+		padding: 6px 10px;
+	}
 }
 </style>

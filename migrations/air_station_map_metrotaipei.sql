@@ -8,42 +8,89 @@ BEGIN;
 
 DO $mig$
 DECLARE
-  v_component_id  INTEGER;
-  v_map_id        INTEGER;
+  v_component_id  BIGINT;
+  v_map_id        BIGINT;
 BEGIN
-  -- 取下一個可用 id（避開既有資料）
-  SELECT COALESCE(MAX(id), 0) + 1 INTO v_component_id FROM public.components;
-  SELECT COALESCE(MAX(id), 0) + 1 INTO v_map_id       FROM public.component_maps;
+  SELECT id INTO v_component_id
+  FROM public.components
+  WHERE index = 'air_station_map_metrotaipei'
+  ORDER BY id
+  LIMIT 1;
+
+  IF v_component_id IS NULL THEN
+    INSERT INTO public.components (index, name)
+    VALUES ('air_station_map_metrotaipei', '雙北空氣品質監測站')
+    RETURNING id INTO v_component_id;
+  ELSE
+    UPDATE public.components
+    SET name = '雙北空氣品質監測站'
+    WHERE id = v_component_id;
+  END IF;
+
+  SELECT id INTO v_map_id
+  FROM public.component_maps
+  WHERE index = 'air_station_map_metrotaipei'
+  ORDER BY id
+  LIMIT 1;
+
+  IF v_map_id IS NULL THEN
+    SELECT COALESCE(MAX(id), 0) + 1 INTO v_map_id
+    FROM public.component_maps;
+  END IF;
 
   RAISE NOTICE '使用 component id=%, map id=%', v_component_id, v_map_id;
 
-  -- 1) components
-  INSERT INTO public.components (id, index, name) VALUES
-    (v_component_id, 'air_station_map_metrotaipei', '雙北空氣品質監測站');
-
   -- 2) component_charts（6 級 AQI 色帶，環境部官方配色）
+  DELETE FROM public.component_charts
+  WHERE index = 'air_station_map_metrotaipei';
+
   INSERT INTO public.component_charts (index, color, types, unit) VALUES
     ('air_station_map_metrotaipei',
      '{#00e400,#ffff00,#ff7e00,#ff0000,#8f3f97,#7e0023}',
-     '{MapLegend}',
-     '測站');
+     '{ColumnChart,DistrictChart}',
+     'AQI');
 
   -- 3) component_maps（circle + step expression 依 AQI 上色）
-  INSERT INTO public.component_maps
-    (id, index, title, type, source, size, icon, paint, property)
-  VALUES (
-    v_map_id,
-    'air_station_map_metrotaipei',
-    '空品測站',
-    'circle',
-    'geojson',
-    NULL,
-    NULL,
-    $paint${"circle-radius":8,"circle-color":["step",["get","aqi"],"#00e400",51,"#ffff00",101,"#ff7e00",151,"#ff0000",201,"#8f3f97",301,"#7e0023"],"circle-stroke-width":1,"circle-stroke-color":"#ffffff"}$paint$::jsonb,
-    $prop$[{"key":"site_name","name":"測站名稱"},{"key":"aqi","name":"AQI"},{"key":"status","name":"空氣品質狀態"},{"key":"pollutant","name":"主要污染物"},{"key":"pm_2point5_ug_m3","name":"PM2.5 (μg/m³)"},{"key":"data_time","name":"發布時間"}]$prop$::jsonb
-  );
+  IF EXISTS (
+    SELECT 1
+    FROM public.component_maps
+    WHERE id = v_map_id
+  ) THEN
+    UPDATE public.component_maps
+    SET index = 'air_station_map_metrotaipei',
+        title = '空品測站',
+        type = 'circle',
+        source = 'geojson',
+        size = NULL,
+        icon = NULL,
+        paint = $paint${"circle-radius":8,"circle-color":["step",["get","aqi"],"#00e400",51,"#ffff00",101,"#ff7e00",151,"#ff0000",201,"#8f3f97",301,"#7e0023"],"circle-stroke-width":1,"circle-stroke-color":"#ffffff"}$paint$::json,
+        property = $prop$[{"key":"site_name","name":"測站名稱"},{"key":"aqi","name":"AQI"},{"key":"status","name":"空氣品質狀態"},{"key":"district","name":"行政區"},{"key":"county","name":"所屬縣市"},{"key":"update_time","name":"更新時間"}]$prop$::json
+    WHERE id = v_map_id;
+  ELSE
+    INSERT INTO public.component_maps
+      (id, index, title, type, source, size, icon, paint, property)
+    VALUES (
+      v_map_id,
+      'air_station_map_metrotaipei',
+      '空品測站',
+      'circle',
+      'geojson',
+      NULL,
+      NULL,
+      $paint${"circle-radius":8,"circle-color":["step",["get","aqi"],"#00e400",51,"#ffff00",101,"#ff7e00",151,"#ff0000",201,"#8f3f97",301,"#7e0023"],"circle-stroke-width":1,"circle-stroke-color":"#ffffff"}$paint$::json,
+      $prop$[{"key":"site_name","name":"測站名稱"},{"key":"aqi","name":"AQI"},{"key":"status","name":"空氣品質狀態"},{"key":"district","name":"行政區"},{"key":"county","name":"所屬縣市"},{"key":"update_time","name":"更新時間"}]$prop$::json
+    );
+  END IF;
 
-  -- 4) query_charts（map_legend 查詢，綁定 component_maps）
+  DELETE FROM public.component_maps
+  WHERE index = 'air_station_map_metrotaipei'
+    AND id <> v_map_id;
+
+  -- 4) query_charts（三維資料供長條圖/行政圖使用，並綁定 map config）
+  DELETE FROM public.query_charts
+  WHERE index = 'air_station_map_metrotaipei'
+    AND city = 'metrotaipei';
+
   INSERT INTO public.query_charts (
     index, history_config, map_config_ids, map_filter,
     time_from, time_to, update_freq, update_freq_unit,
@@ -68,8 +115,8 @@ BEGIN
     '{doit,ntpc}',
     NOW(),
     NOW(),
-    'map_legend',
-    'SELECT site_name, aqi, status, pollutant, pm_2point5_ug_m3, data_time, county, wkb_geometry FROM public.moenv_air_quality',
+    'three_d',
+    'SELECT district AS x_axis, county AS y_axis, aqi AS data, site_name AS name, aqi AS value, county AS type FROM public.moenv_air_quality ORDER BY county, aqi DESC',
     NULL,
     'metrotaipei'
   );

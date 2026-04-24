@@ -9,11 +9,24 @@ const props = defineProps({
 	isCollapsed: Boolean,
 });
 
-const emit = defineEmits(["update:isCollapsed", "switch-dashboard"]);
+const emit = defineEmits([
+	"update:isCollapsed",
+	"switch-dashboard",
+	"open-analysis",
+	"close-analysis",
+]);
 
 const islandCollapsed = ref(props.isCollapsed);
 function switchDashboard(scope, dashboard, city) {
 	emit("switch-dashboard", { scope, dashboard, city });
+}
+
+function openAnalysis(payload) {
+	emit("open-analysis", payload);
+}
+
+function closeAnalysis(payload) {
+	emit("close-analysis", payload);
 }
 
 watch(
@@ -35,7 +48,11 @@ watch(islandCollapsed, (newVal) => {
       class="map-island"
       :class="{ 'map-island-collapsed': islandCollapsed }"
     >
-      <MapLayerSidebarContent @switch-dashboard="switchDashboard" />
+      <MapLayerSidebarContent
+		@switch-dashboard="switchDashboard"
+		@open-analysis="openAnalysis"
+		@close-analysis="closeAnalysis"
+	  />
     </aside>
 
     <button

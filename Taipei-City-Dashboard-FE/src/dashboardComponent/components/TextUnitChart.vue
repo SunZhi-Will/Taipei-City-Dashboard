@@ -57,19 +57,22 @@ const props = defineProps([
 	height: 100%;
 	flex: 1;
 	color: var(--color-normal-text);
-	overflow-y: auto;
+	overflow: hidden;
 
 	&__container {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		min-height: 100%
+		height: 100%;
+		min-height: 100%;
+		align-content: stretch;
 	}
 	&__content {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: 1rem;
+		padding: 0.75rem;
+		gap: 0.2rem;
 		border-bottom: 1px solid var(--color-border);
 
 		// 右邊框（不包括每行最後一個）
@@ -90,6 +93,11 @@ const props = defineProps([
 	&__value {
 		font-size: 1.5rem;
 		padding-right: 0.25rem;
+		line-height: 1;
+	}
+
+	&__unit {
+		line-height: 1;
 	}
 }
 </style>

@@ -327,29 +327,6 @@ watch(
               @explore="handleExploreIndicator"
               @open-map="handleOpenMap"
             />
-
-            <!-- 儀表板卡片區 -->
-            <div
-              v-if="chat.relations && chat.relations.length > 0"
-              class="dashboard-cards-area"
-            >
-              <div
-                v-for="(item, index) in chat.relations"
-                :key="index"
-                class="dashboard-card"
-              >
-                <div class="card-content">
-                  <h4 class="card-title">
-                    {{ item.name }}
-                  </h4>
-                  <div class="card-meta">
-                    <span class="card-city">
-                      {{ item.city_display || (item.city === "taipei" ? "🏙️ 臺北" : "🌆 雙北") }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
             <div
               v-if="chat.button"
               v-horizontal-wheel
@@ -550,95 +527,16 @@ $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 					width: 100%;
 					min-width: 0;
 
-					.dashboard-cards-area {
-						display: grid;
-						grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-						gap: 12px;
-						margin-top: 12px;
-						margin-bottom: 12px;
-
-						.dashboard-card {
-							position: relative;
-							background: linear-gradient(135deg, #1f2a33 0%, #252a2f 100%);
-							border: 1px solid $border-color;
-							border-radius: $radius-10;
-							padding: 12px;
-							cursor: pointer;
-							transition: $transition-fast;
-							overflow: hidden;
-
-							&::before {
-								content: '';
-								position: absolute;
-								top: 0;
-								left: 0;
-								right: 0;
-								height: 3px;
-								background: linear-gradient(90deg, #00b4d8, #00d4ff);
-								opacity: 0;
-								transition: opacity 0.3s ease;
-							}
-
-							&:hover {
-								border-color: $border-hover;
-								transform: translateY(-2px);
-								box-shadow: 0 4px 12px rgba(0, 180, 216, 0.15);
-
-								&::before {
-									opacity: 1;
-								}
-
-								.card-title {
-									color: #00d4ff;
-								}
-							}
-
-							.card-rank {
-									display: none;
-							}
-
-							.card-title {
-								margin: 0;
-								font-size: 14px;
-								font-weight: 600;
-								color: $text-primary;
-								transition: color 0.2s;
-								word-break: break-word;
-								max-height: 2.8em;
-								overflow: hidden;
-								text-overflow: ellipsis;
-								display: -webkit-box;
-								line-clamp: 2;
-								-webkit-line-clamp: 2;
-								-webkit-box-orient: vertical;
-							}
-
-							.card-meta {
-								display: flex;
-								gap: 8px;
-								margin-top: 8px;
-								flex-wrap: wrap;
-								font-size: 12px;
-
-								.card-city {
-									background: rgba(0, 180, 216, 0.1);
-									color: #00d4ff;
-									padding: 2px 6px;
-									border-radius: 3px;
-									border: 1px solid rgba(0, 180, 216, 0.2);
-									white-space: nowrap;
-								}
-							}
-						}
-					}
-
 					.message--plain {
 						width: 100%;
 						&.message--markdown {
+							display: block;
 							width: 100%;
 							:deep(p) { margin: 0 0 0.5rem 0; width: 100%; }
 							:deep(.ai-table-wrapper) {
 								margin: 12px 0;
+								inline-size: 100% !important;
+								max-inline-size: 100% !important;
 								width: 100% !important;
 								display: block;
 								overflow-x: auto;
@@ -648,27 +546,38 @@ $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 								box-sizing: border-box;
 							}
 							:deep(.ai-table) {
+								display: table;
 								width: 100% !important;
 								min-width: 100% !important;
+								max-width: 100%;
 								border-collapse: collapse;
+								border: 1px solid rgba(255,255,255,0.28);
 								font-size: 13px;
 								text-align: left;
 								table-layout: fixed;
 								box-sizing: border-box;
 								th, td {
 									padding: 10px 12px;
-									border-bottom: 1px solid rgba(255,255,255,0.05);
+									border: 1px solid rgba(255,255,255,0.22);
 									word-break: break-word;
+									text-align: left;
 								}
-								th:nth-child(1), td:nth-child(1) { width: 50px; text-align: center; } /* 排名 */
-								th:nth-child(2), td:nth-child(2) { width: 70px; } /* 城市名 */
-								/* 其他欄位（組件名、關聯性）會自動分配剩餘空間 */
+								th:nth-child(1), td:nth-child(1) {
+									width: 56px;
+									white-space: nowrap;
+									text-align: left;
+								} /* 排名欄最小寬 */
+								th:nth-child(2), td:nth-child(2) {
+									width: 84px;
+									white-space: nowrap;
+								} /* 城市欄維持緊湊 */
+								th:last-child, td:last-child { width: calc(100% - 140px); } /* 主要內容欄吃滿剩餘寬度 */
 								th {
-									background: rgba(255,255,255,0.05);
+									background: rgba(255,255,255,0.09);
 									font-weight: 600;
-									color: #00d4ff;
+									color: $white;
 								}
-								tr:last-child td { border-bottom: none; }
+								tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
 							}
 						}
 						p {
@@ -682,9 +591,11 @@ $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 					}
 
 					.message--bubble {
+						display: inline-block;
+						max-width: 100%;
 						border: none;
 						border-radius: 1rem;
-						background: #2a3f52;
+						background: #6b7280;
 						box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 
 						p {
@@ -732,6 +643,9 @@ $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 			.user {
 				.content {
 					max-width: 32rem;
+					width: auto;
+					flex: 0 1 auto;
+					align-items: flex-end;
 				}
 			}
 		}

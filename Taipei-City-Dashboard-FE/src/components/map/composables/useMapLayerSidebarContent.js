@@ -198,12 +198,32 @@ export function useMapLayerSidebarContent(emit) {
 
 		if (checked) {
 			mapStore.addToMapLayerList(component.map_config);
+			emit("open-analysis", {
+				dashboard,
+				city,
+				component,
+			});
 		} else {
 			mapStore.clearByParamFilter(component.map_config);
 			mapStore.turnOffMapLayerVisibility(component.map_config);
+			emit("close-analysis", {
+				component,
+			});
 		}
 
 		componentToggles.value[key] = checked;
+	}
+
+	function handleComponentAnalyze({ dashboard, city, component }) {
+		if (!hasMapConfig(component)) {
+			dialogStore.showNotification("info", "本組件沒有空間資料，無法互動分析");
+			return;
+		}
+		emit("open-analysis", {
+			dashboard,
+			city,
+			component,
+		});
 	}
 
 	watch(
@@ -282,5 +302,6 @@ export function useMapLayerSidebarContent(emit) {
 		getDashboardComponents,
 		handleDashboardRowClick,
 		handleComponentSyncToggle,
+		handleComponentAnalyze,
 	};
 }

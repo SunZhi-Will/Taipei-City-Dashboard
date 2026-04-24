@@ -24,6 +24,11 @@ const { isFullscreen, toggle } = useFullscreen();
 const isDropdownOpen = ref(false);
 
 const toggleDropdown = (state) => {
+  if (!(authStore.isMobileDevice && authStore.isNarrowDevice)) {
+    isDropdownOpen.value = false;
+    return;
+  }
+
   if (state !== undefined) {
     isDropdownOpen.value = state;
   } else {
@@ -81,6 +86,7 @@ const isLocalhost = computed(() => {
           
           <!-- Immersive Mobile Menu Overlay (Extracted) -->
           <MobileDashboardSwitcher 
+            v-if="authStore.isMobileDevice && authStore.isNarrowDevice"
             :is-open="isDropdownOpen"
             @close="toggleDropdown(false)"
           />
@@ -342,30 +348,59 @@ const isLocalhost = computed(() => {
 
     &-tabs {
       display: flex;
+      align-items: center;
+      gap: 6px;
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
       pointer-events: auto;
 
       a {
-        height: 59px;
+        padding: 6px 16px;
         display: flex;
         align-items: center;
-        margin-left: var(--font-s);
-        transition: opacity 0.2s, border-bottom 0.2s;
-        border-bottom: solid 3px transparent;
+        background: transparent;
+        color: var(--color-complement-text);
+        text-decoration: none;
+        font-size: var(--font-s);
+        font-weight: 500;
+        border-radius: 999px;
+        white-space: nowrap;
+        transition: background 0.2s ease, color 0.2s ease;
 
         &:hover {
-          opacity: 0.8;
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--color-text);
         }
       }
 
       .router-link-active {
-        border-bottom: solid 3px var(--color-highlight);
-        color: var(--color-highlight);
+        background: rgba(255, 255, 255, 0.16);
+        color: #ffffff;
+        font-weight: 600;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 
         &:hover {
-          opacity: 1;
+          background: rgba(255, 255, 255, 0.16);
+        }
+      }
+
+      /* AI Studio 特殊樣式 */
+      a[href*="ai-studio"],
+      a[href="/ai-studio"] {
+        &:not(.router-link-active) {
+          color: #c4b5fd;
+
+          &:hover {
+            background: rgba(139, 92, 246, 0.18);
+            color: #ddd6fe;
+          }
+        }
+
+        &.router-link-active {
+          background: rgba(124, 58, 237, 0.45);
+          color: #ede9fe;
+          box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.5);
         }
       }
 

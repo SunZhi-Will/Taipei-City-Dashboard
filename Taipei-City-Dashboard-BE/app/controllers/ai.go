@@ -134,13 +134,24 @@ func ChatWithTWCC(c *gin.Context) {
 
 	answerMode := "agent_chat"
 	for _, toolName := range usedTools {
+		if toolName == "get_component_chart_data" {
+			answerMode = "agent_data_grounded"
+			break
+		}
+	}
+
+	if answerMode == "agent_chat" {
+	for _, toolName := range usedTools {
 		if toolName == "retrieve_components_by_query" {
 			answerMode = "agent_rag"
 			break
 		}
 	}
+	}
 	if chatResult.AgentResult != nil && chatResult.AgentResult.PrimaryComponent != nil {
-		answerMode = "agent_component_selection"
+		if answerMode == "agent_chat" || answerMode == "agent_rag" {
+			answerMode = "agent_component_selection"
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -155,8 +166,10 @@ func ChatWithTWCC(c *gin.Context) {
 			},
 			"tool_used":   logEntry.ToolUsed,
 			"tools":       usedTools,
+			"tool_timeline": chatResult.ToolTimeline,
 			"answer_mode": answerMode,
 			"agent_result": chatResult.AgentResult,
+			"display_plan": chatResult.DisplayPlan,
 			"latency_ms":  logEntry.LatencyMS,
 			"model":       logEntry.Model,
 			"provider":    logEntry.Provider,

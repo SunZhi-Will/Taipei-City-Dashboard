@@ -27,6 +27,11 @@ const districtColor = ref(props.chart_config.color[0]);
 const mousePosition = ref({ x: null, y: null });
 const selectedIndex = ref(null);
 
+function toFiniteNumber(value) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 const cities = [
 	{ name: "臺北市", value: "taipei" },
 	{ name: "新北市", value: "newtaipei" },
@@ -134,11 +139,12 @@ const districtData = computed(() => {
 	let sum = 0;
 	if (props.series.length === 1) {
 		props.series[0].data.forEach((item) => {
-			output[item.x] = item.y;
-			if (item.y > highest) {
-				highest = item.y;
+      const numericValue = toFiniteNumber(item.y);
+      output[item.x] = numericValue;
+      if (numericValue > highest) {
+        highest = numericValue;
 			}
-			sum += item.y;
+      sum += numericValue;
 		});
 	} else {
 		props.series.forEach((serie) => {
@@ -146,14 +152,14 @@ const districtData = computed(() => {
 				if (!output[props.chart_config.categories[i]]) {
 					output[props.chart_config.categories[i]] = 0;
 				}
-				output[props.chart_config.categories[i]] += +serie.data[i];
+        output[props.chart_config.categories[i]] += toFiniteNumber(
+          serie.data[i]
+        );
 			}
 		});
-		highest = Object.values(output).sort(function (a, b) {
-			return b - a;
-		})[0];
+    highest = Math.max(...Object.values(output).map((value) => toFiniteNumber(value)));
 		sum = Object.values(output).reduce(
-			(partialSum, a) => partialSum + a,
+      (partialSum, a) => partialSum + toFiniteNumber(a),
 			0
 		);
 	}

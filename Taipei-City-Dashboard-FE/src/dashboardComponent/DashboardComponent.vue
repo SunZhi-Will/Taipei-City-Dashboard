@@ -77,6 +77,9 @@ const props = defineProps({
 	toggleOn: { type: Boolean, default: false },
 	fullscreenBtn: { type: Boolean, default: true },
 	expandedInContent: { type: Boolean, default: false },
+	presentationMode: { type: Boolean, default: false },
+	noOuterContainer: { type: Boolean, default: false },
+	initialChartType: { type: String, default: '' },
 });
 
 const emits = defineEmits([
@@ -94,7 +97,11 @@ const emits = defineEmits([
 	"expandLayout"
 ]);
 
-const activeChart = ref(props.config.chart_config.types[0]);
+const activeChart = ref(
+	props.initialChartType && props.config.chart_config.types.includes(props.initialChartType)
+		? props.initialChartType
+		: props.config.chart_config.types[0],
+);
 const activeCity = computed({
 	get: () => props.activeCity,
 	set: (value) => {
@@ -238,12 +245,16 @@ function returnChartComponent(name, svg) {
 
 <template>
   <div
-    class="dashboardcomponent-fullscreen-container"
+		:class="[
+			'dashboardcomponent-fullscreen-container',
+			{ 'dashboardcomponent-fullscreen-container--none': noOuterContainer },
+		]"
   >
     <div
       :class="[
         {
           dashboardcomponent: true,
+					presentation: presentationMode,
           mapclosed: mode.includes('map') && !toggleOn,
           mapopen: mode === 'map' && toggleOn,
           halfmapopen: mode === 'halfmap' && toggleOn,
@@ -460,6 +471,7 @@ function returnChartComponent(name, svg) {
           :map_config="config.map_config"
           :map_filter="config.map_filter"
           :map_filter_on="mode.includes('map')"
+					:show-color-legend="presentationMode"
           @filter-by-param="
             (map_filter, map_config, x, y) =>
               $emit('filterByParam', map_filter, map_config, x, y)
@@ -562,6 +574,10 @@ function returnChartComponent(name, svg) {
 <style scoped lang="scss">
 .dashboardcomponent-fullscreen-container {
 	width: 100%;
+
+	&--none {
+		display: contents;
+	}
 }
 
 * {
@@ -901,6 +917,36 @@ button:hover {
 				color: var(--color-highlight);
 				user-select: none;
 			}
+		}
+	}
+
+	&.presentation {
+		height: 100% !important;
+		max-height: none !important;
+		min-height: 0 !important;
+		padding: 0 !important;
+		border: none;
+		box-shadow: none;
+
+		.dashboardcomponent-header,
+		.dashboardcomponent-control,
+		.dashboardcomponent-footer {
+			display: none !important;
+		}
+
+		.dashboardcomponent-chart,
+		.dashboardcomponent-loading,
+		.dashboardcomponent-error {
+			height: 100% !important;
+			max-height: none !important;
+			min-height: 0 !important;
+			padding-top: 0 !important;
+		}
+
+		.dashboardcomponent-chart > * {
+			height: 100% !important;
+			max-height: none !important;
+			min-height: 0 !important;
 		}
 	}
 }

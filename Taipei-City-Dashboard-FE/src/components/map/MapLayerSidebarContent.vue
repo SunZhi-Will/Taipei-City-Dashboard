@@ -2,7 +2,7 @@
 import MapDashboardListSection from "./MapDashboardListSection.vue";
 import { useMapLayerSidebarContent } from "./composables/useMapLayerSidebarContent";
 
-const emit = defineEmits(["switch-dashboard"]);
+const emit = defineEmits(["switch-dashboard", "open-analysis", "close-analysis"]);
 
 const {
 	authStore,
@@ -25,6 +25,7 @@ const {
 	getDashboardComponents,
 	handleDashboardRowClick,
 	handleComponentSyncToggle,
+  handleComponentAnalyze,
 } = useMapLayerSidebarContent(emit);
 </script>
 
@@ -63,6 +64,7 @@ const {
           :has-map-config="hasMapConfig"
           @dashboard-click="handleDashboardRowClick"
           @component-toggle="handleComponentSyncToggle"
+          @component-analyze="handleComponentAnalyze"
         />
 
         <button
@@ -85,6 +87,7 @@ const {
           :has-map-config="hasMapConfig"
           @dashboard-click="handleDashboardRowClick"
           @component-toggle="handleComponentSyncToggle"
+          @component-analyze="handleComponentAnalyze"
         />
       </div>
     </section>
@@ -126,6 +129,7 @@ const {
           :has-map-config="hasMapConfig"
           @dashboard-click="handleDashboardRowClick"
           @component-toggle="handleComponentSyncToggle"
+          @component-analyze="handleComponentAnalyze"
         />
       </div>
     </section>

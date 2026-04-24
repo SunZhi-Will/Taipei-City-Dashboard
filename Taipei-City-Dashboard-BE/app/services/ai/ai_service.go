@@ -57,11 +57,49 @@ type AgentResult struct {
 	RetrievalType     string                    `json:"retrieval_type,omitempty"`
 }
 
+type DisplayPlanSlide struct {
+	ID               string `json:"id"`
+	Type             string `json:"type"`
+	Title            string `json:"title"`
+	Summary          string `json:"summary,omitempty"`
+	FocusComponentID int64  `json:"focus_component_id,omitempty"`
+	ChartType        string `json:"chart_type,omitempty"` // specific chart type to display for this slide
+	DurationSec      int    `json:"duration_sec"`
+}
+
+type DisplayPlanBlock struct {
+	Type             string `json:"type"`
+	Title            string `json:"title"`
+	Summary          string `json:"summary,omitempty"`
+	ComponentID      int64  `json:"component_id,omitempty"`
+	ComponentIndex   string `json:"component_index,omitempty"`
+	City             string `json:"city,omitempty"`
+	ChartType        string `json:"chart_type,omitempty"`
+}
+
+type DisplayPlan struct {
+	Mode            string             `json:"mode"`
+	StrictRender    bool               `json:"strict_render"`
+	Style           string             `json:"style"`
+	Audience        string             `json:"audience"`
+	ChartPreference string             `json:"chart_preference,omitempty"`
+	Slides          []DisplayPlanSlide `json:"slides"`
+	Blocks          []DisplayPlanBlock `json:"blocks"`
+}
+
 type AIChatResult struct {
 	Log        *models.AIChatLog    `json:"log"`
 	UsedTools  []string             `json:"used_tools"`
 	ToolResults map[string]string   `json:"tool_results,omitempty"`
+	ToolTimeline []ToolExecution    `json:"tool_timeline,omitempty"`
 	AgentResult *AgentResult        `json:"agent_result,omitempty"`
+	DisplayPlan *DisplayPlan        `json:"display_plan,omitempty"`
+}
+
+type ToolExecution struct {
+	Name   string `json:"name"`
+	Args   string `json:"args,omitempty"`
+	Result string `json:"result,omitempty"`
 }
 
 // ChatWithTWCC handles the AI conversation logic including retries, tool calling loop, and logging.
@@ -81,6 +119,7 @@ func newSession(req AIChatRequest, options ...llms.CallOption) *aiSession {
 		options:         options,
 		currentMessages: make([]llms.MessageContent, 0),
 		toolResults:     make(map[string]string),
+		toolTimeline:    make([]ToolExecution, 0),
 		startTime:       time.Now(),
 	}
 	for _, opt := range options {
@@ -100,6 +139,7 @@ type aiSession struct {
 	toolUsed        bool
 	executedTools   []string
 	toolResults     map[string]string
+	toolTimeline    []ToolExecution
 	lastResp        *llms.ContentResponse
 	lastErr         error
 	startTime       time.Time
@@ -192,6 +232,11 @@ func (s *aiSession) executeTools(ctx context.Context, toolCalls []llms.ToolCall)
 		
 		// Store tool result for potential extraction
 		s.toolResults[tc.FunctionCall.Name] = result
+		s.toolTimeline = append(s.toolTimeline, ToolExecution{
+			Name: tc.FunctionCall.Name,
+			Args: tc.FunctionCall.Arguments,
+			Result: result,
+		})
 
 		s.currentMessages = append(s.currentMessages, llms.MessageContent{
 			Role: llms.ChatMessageTypeTool,
@@ -210,10 +255,46 @@ func (s *aiSession) injectInstructions() {
 		toolNames += t.Function.Name
 	}
 
-	instruction := fmt.Sprintf("\nSystem Instruction:\n1. Use ONLY: [%s].\n2. NEVER nest tool calls \n3. Arguments MUST be literal values (strings, integers, etc.), never function calls \n4. For dependent tasks, call tools sequentially in separate turns.\n5. If stuck, respond with text.\n\nStyle Guide:\n- Role: 你是臺北市城市大數據儀表板的智慧助理。回覆對象是一般市民，語氣要親切、專業並適度使用 emoji 😊。\n- 開場：始終以「您好 😊」開場。\n- 組件推薦：取得結果後，請以 Markdown 表格呈現推薦清單，欄位「僅限」包含：排名、城市名、組件名。絕對不要出現「關聯性」或任何評分分數。\n- 城市名：請根據結果填入「臺北」或「雙北」，嚴禁出現 metrotaipei 或 taipei 等技術字眼。\n- 說明：表格後請說明：「您可以將這些組件整批加入『個人儀表板』，方便日後快速查看與使用。」\n- 結尾：請提供溫馨提示，如：「若您有任何新的查詢或想深入探索的內容，都可以隨時告訴我 💬✨」。\n- 禁忌：嚴禁出現 RAG、tool、score、index、id、主結果、候選、檢索、關聯性、分數、相似度等技術用語。", toolNames)
+	instruction := fmt.Sprintf("\nSystem Instruction:\n1. Use ONLY: [%s].\n2. NEVER nest tool calls.\n3. Arguments MUST be literal values (strings, integers, etc.), never function calls.\n4. For dependent tasks, call tools sequentially in separate turns.\n5. If stuck, respond with plain text.\n6. 若使用者要求具體數值、最近變化、趨勢比較，必須先呼叫 retrieve_components_by_query 選出元件，再呼叫 get_component_chart_data 取得資料後才能回答；回答時需帶出數值與時間範圍。\n\nStyle Guide:\n- Role: 你是臺北市城市大數據儀表板的智慧助理，回覆對象是一般市民。\n- 語氣：清楚、友善、專業；避免過度口語與過多 emoji。\n- 城市名：只能使用「臺北」或「雙北」，不得出現 metrotaipei 或 taipei 等技術字眼。\n- 組件推薦：若有 2 筆以上結果，使用 Markdown 表格，欄位僅限「排名｜城市名｜組件名」。\n- 表格規範：表格內只能放資料列，禁止把完整句子、提醒語、結語放進表格欄位。\n- 版面規範：表格結束後必須空一行，再用一般段落補充說明。\n- 說明內容：可提示「可加入個人儀表板」與下一步建議，但要放在表格外。\n- 禁忌：不得出現 RAG、tool、score、index、id、主結果、候選、檢索、關聯性、分數、相似度等技術用語。", toolNames)
 	
 	if s.req.AppMode == "ai_studio" {
-		instruction += "\n6. Context: AI STUDIO. 優先推薦圖表且回覆要簡潔流暢，避免長篇大論，因為你的回覆將作為大螢幕輪播場景的前導介紹。"
+		instruction += `
+7. Context: AI STUDIO — 戰情室大螢幕播映模式。
+
+你的任務是在回覆末尾輸出一個 JSON 區塊（以 ` + "```json" + ` 包裹），作為輪播展示規劃（display_plan）。
+
+規劃流程（必須遵守）：
+① 先呼叫 retrieve_components_by_query 取得組件清單，每個組件包含 chart_types (陣列) 與 has_map (boolean)。
+② 分析每個組件的 chart_types：若有多種圖表類型，為「每種類型」各建立一張投影片。
+③ 若組件 has_map=true，建立一張 type="map" 的投影片（直接渲染組件的地圖視角）。
+④ 純圖表組件建立 type="component" 投影片。
+⑤ 不要插入 hero 或 closing 等包裝頁，第一張就是組件內容。
+⑥ 投影片數量沒有上限，全部組件及圖表類型都要納入。
+
+display_plan JSON 格式（嚴格遵守）：
+{
+  "mode": "presentation",
+  "strict_render": true,
+  "style": "carousel",
+  "audience": "war-room",
+  "slides": [
+    {
+      "id": "唯一ID",
+      "type": "component" 或 "map",
+      "title": "組件名稱（+圖表類型說明）",
+      "summary": "一句話說明這張投影片的洞察重點",
+      "focus_component_id": 組件ID（整數）,
+      "chart_type": "bar|line|percent|map|two_d 等",
+      "duration_sec": 12
+    }
+  ]
+}
+
+規則：
+- 有 has_map=true 的組件，額外建立 type="map" 投影片，chart_type="map"。
+- chart_type 必須從該組件的 chart_types 陣列中選擇實際存在的類型。
+- duration_sec 預設 12，重要組件可設 15，地圖 15。
+- 回覆文字（說明）放在 JSON 區塊之前，JSON 區塊放在最後。`
 	}
 	
 	s.currentMessages = make([]llms.MessageContent, 0)
@@ -230,7 +311,7 @@ func (s *aiSession) injectInstructions() {
 	if !merged {
 		s.currentMessages = append([]llms.MessageContent{{
 			Role: llms.ChatMessageTypeSystem,
-			Parts: []llms.ContentPart{llms.TextContent{Text: "Instruction: Use tools: [" + toolNames + "]."}},
+			Parts: []llms.ContentPart{llms.TextContent{Text: instruction}},
 		}}, s.currentMessages...)
 	}
 }
@@ -253,6 +334,7 @@ func (s *aiSession) finalize() (*AIChatResult, error) {
 			Log:         log,
 			UsedTools:   append([]string{}, s.executedTools...),
 			ToolResults: copyToolResults(s.toolResults),
+			ToolTimeline: copyToolTimeline(s.toolTimeline),
 		}, s.lastErr
 	}
 
@@ -268,18 +350,286 @@ func (s *aiSession) finalize() (*AIChatResult, error) {
 		}
 	}
 
+	agentResult := buildAgentResult(log.Question, s.latestToolResult("retrieve_components_by_query"))
+	rawAnswer := log.Answer
+	displayPlan := buildDisplayPlan(log.Question, s.req.AppMode, rawAnswer, agentResult)
+	cleanAnswer := stripDisplayPlanFromAnswer(rawAnswer)
+	if strings.TrimSpace(cleanAnswer) == "" {
+		cleanAnswer = rawAnswer
+	}
+	log.Answer = cleanAnswer
+
 	if err := models.CreateAIChatLog(log); err != nil {
 		logs.FError("DB Log Error: %v", err)
 	}
 
-	agentResult := buildAgentResult(log.Question, s.toolResults["retrieve_components_by_query"])
+	if displayPlan == nil {
+		displayPlan = buildDisplayPlan(log.Question, s.req.AppMode, rawAnswer, agentResult)
+	}
 
 	return &AIChatResult{
 		Log:         log,
 		UsedTools:   append([]string{}, s.executedTools...),
 		ToolResults: copyToolResults(s.toolResults),
+		ToolTimeline: copyToolTimeline(s.toolTimeline),
 		AgentResult: agentResult,
+		DisplayPlan: displayPlan,
 	}, nil
+}
+
+func (s *aiSession) latestToolResult(name string) string {
+	for i := len(s.toolTimeline) - 1; i >= 0; i-- {
+		if s.toolTimeline[i].Name == name {
+			return s.toolTimeline[i].Result
+		}
+	}
+	return ""
+}
+
+// stripDisplayPlanFromAnswer removes JSON planning blocks from the user-facing answer.
+func stripDisplayPlanFromAnswer(answer string) string {
+	text := strings.TrimSpace(answer)
+	if text == "" {
+		return ""
+	}
+
+	idx := strings.Index(text, "```json")
+	if idx >= 0 {
+		prefix := strings.TrimSpace(text[:idx])
+		if prefix != "" {
+			return prefix
+		}
+	}
+
+	modeIdx := strings.Index(text, `"mode"`)
+	if modeIdx > 0 {
+		start := strings.LastIndex(text[:modeIdx], "{")
+		if start >= 0 {
+			prefix := strings.TrimSpace(text[:start])
+			if prefix != "" {
+				return prefix
+			}
+		}
+	}
+
+	return text
+}
+
+// extractDisplayPlanJSON parses the AI's response for a display_plan JSON block.
+// The AI is instructed to output it as ```json ... ``` at the end of the message.
+func extractDisplayPlanJSON(aiAnswer string) *DisplayPlan {
+	if aiAnswer == "" {
+		return nil
+	}
+	idx := strings.Index(aiAnswer, "```json")
+	if idx == -1 {
+		idx = strings.Index(aiAnswer, "```\n{")
+	}
+	if idx == -1 {
+		// Try bare JSON starting with { "mode":
+		start := strings.Index(aiAnswer, `"mode"`)
+		if start == -1 {
+			return nil
+		}
+		// Walk back to find the opening brace
+		for i := start - 1; i >= 0; i-- {
+			if aiAnswer[i] == '{' {
+				start = i
+				break
+			}
+		}
+		end := strings.LastIndex(aiAnswer, "}")
+		if end <= start {
+			return nil
+		}
+		return tryParseDisplayPlan(aiAnswer[start : end+1])
+	}
+
+	// Extract content between fences
+	rest := aiAnswer[idx:]
+	openBrace := strings.Index(rest, "{")
+	if openBrace == -1 {
+		return nil
+	}
+	closeFence := strings.Index(rest[openBrace:], "```")
+	if closeFence == -1 {
+		return nil
+	}
+	jsonStr := rest[openBrace : openBrace+closeFence]
+	// Trim trailing whitespace/newlines
+	jsonStr = strings.TrimRight(jsonStr, " \t\n\r")
+	return tryParseDisplayPlan(jsonStr)
+}
+
+func tryParseDisplayPlan(raw string) *DisplayPlan {
+	var plan DisplayPlan
+	if err := json.Unmarshal([]byte(raw), &plan); err != nil {
+		logs.FError("display_plan parse error: %v", err)
+		return nil
+	}
+	if plan.Mode == "" || len(plan.Slides) == 0 {
+		return nil
+	}
+	normalized := normalizeDisplayPlan(plan)
+	if len(normalized.Slides) == 0 {
+		return nil
+	}
+	return &normalized
+}
+
+func normalizeDisplayPlan(plan DisplayPlan) DisplayPlan {
+	if plan.Mode == "" {
+		plan.Mode = "presentation"
+	}
+	if plan.Mode != "presentation" {
+		plan.Mode = "presentation"
+	}
+	if plan.Style == "" {
+		plan.Style = "carousel"
+	}
+	if plan.Audience == "" {
+		plan.Audience = "war-room"
+	}
+	plan.StrictRender = true
+
+	allowedType := map[string]bool{"component": true, "map": true}
+	normalizedSlides := make([]DisplayPlanSlide, 0, len(plan.Slides))
+	for i, slide := range plan.Slides {
+		t := strings.TrimSpace(strings.ToLower(slide.Type))
+		if !allowedType[t] {
+			if t == "" {
+				t = "component"
+			} else {
+				continue
+			}
+		}
+		slide.Type = t
+		if strings.TrimSpace(slide.ID) == "" {
+			slide.ID = fmt.Sprintf("slide-%d", i+1)
+		}
+		if strings.TrimSpace(slide.Title) == "" {
+			slide.Title = fmt.Sprintf("投影片 %d", i+1)
+		}
+		if slide.DurationSec <= 0 {
+			slide.DurationSec = 12
+		}
+		if slide.DurationSec > 30 {
+			slide.DurationSec = 30
+		}
+		if slide.Type == "map" && strings.TrimSpace(slide.ChartType) == "" {
+			slide.ChartType = "map"
+		}
+		normalizedSlides = append(normalizedSlides, slide)
+	}
+	plan.Slides = normalizedSlides
+
+	if len(plan.Blocks) == 0 {
+		for _, s := range plan.Slides {
+			plan.Blocks = append(plan.Blocks, DisplayPlanBlock{
+				Type:      "component_chart",
+				Title:     s.Title,
+				ComponentID: s.FocusComponentID,
+				ChartType: func() string {
+					if s.ChartType != "" {
+						return s.ChartType
+					}
+					if s.Type == "map" {
+						return "map"
+					}
+					return "auto"
+				}(),
+			})
+		}
+	}
+
+	return plan
+}
+
+func buildDisplayPlan(question string, appMode string, aiAnswer string, agentResult *AgentResult) *DisplayPlan {
+	if appMode != "ai_studio" {
+		return nil
+	}
+
+	// PRIMARY: try to parse AI-generated display_plan from the response
+	if aiPlan := extractDisplayPlanJSON(aiAnswer); aiPlan != nil {
+		// Ensure sensible defaults
+		if aiPlan.Style == "" {
+			aiPlan.Style = "carousel"
+		}
+		if aiPlan.Audience == "" {
+			aiPlan.Audience = "war-room"
+		}
+		aiPlan.StrictRender = true
+		// Normalise slide duration and ensure chart_type flows to the slide
+		for i := range aiPlan.Slides {
+			if aiPlan.Slides[i].DurationSec <= 0 {
+				aiPlan.Slides[i].DurationSec = 12
+			}
+		}
+		logs.FInfo("AI display_plan parsed: %d slides", len(aiPlan.Slides))
+		return aiPlan
+	}
+
+	// FALLBACK: rule-based plan when AI didn't output JSON (e.g. pure Q&A mode)
+	logs.FInfo("AI display_plan not found in response, using rule-based fallback")
+	questionText := strings.TrimSpace(question)
+	slides := make([]DisplayPlanSlide, 0)
+	blocks := make([]DisplayPlanBlock, 0)
+
+	if agentResult != nil && agentResult.PrimaryComponent != nil {
+		primary := agentResult.PrimaryComponent
+		slides = append(slides, DisplayPlanSlide{
+			ID: fmt.Sprintf("component-%d", primary.ID), Type: "component",
+			Title: primary.Name, Summary: "優先推薦的核心指標",
+			FocusComponentID: primary.ID, DurationSec: 12,
+		})
+		blocks = append(blocks, DisplayPlanBlock{
+			Type: "component_chart", Title: primary.Name, Summary: "主視覺圖表",
+			ComponentID: primary.ID, ComponentIndex: primary.Index, City: primary.City,
+			ChartType: detectChartPreference(questionText),
+		})
+		for i, related := range agentResult.RelatedComponents {
+			if i >= 3 {
+				break
+			}
+			slides = append(slides, DisplayPlanSlide{
+				ID: fmt.Sprintf("related-%d", related.ID), Type: "component",
+				Title: related.Name, Summary: "延伸比較指標",
+				FocusComponentID: related.ID, DurationSec: 12,
+			})
+			blocks = append(blocks, DisplayPlanBlock{
+				Type: "component_chart", Title: related.Name,
+				ComponentID: related.ID, ComponentIndex: related.Index, City: related.City,
+				ChartType: detectChartPreference(questionText),
+			})
+		}
+	}
+
+	if len(slides) == 0 {
+		return nil
+	}
+
+	return &DisplayPlan{
+		Mode: "presentation", StrictRender: true, Style: "carousel",
+		Audience: "war-room", ChartPreference: detectChartPreference(questionText),
+		Slides: slides, Blocks: blocks,
+	}
+}
+
+func detectChartPreference(question string) string {
+	q := strings.ToLower(question)
+	switch {
+	case strings.Contains(q, "長條"), strings.Contains(q, "柱狀"), strings.Contains(q, "bar"):
+		return "bar"
+	case strings.Contains(q, "折線"), strings.Contains(q, "趨勢"), strings.Contains(q, "line"):
+		return "line"
+	case strings.Contains(q, "圓餅"), strings.Contains(q, "比例"), strings.Contains(q, "pie"):
+		return "pie"
+	case strings.Contains(q, "地圖"), strings.Contains(q, "map"):
+		return "map"
+	default:
+		return "auto"
+	}
 }
 
 func copyToolResults(input map[string]string) map[string]string {
@@ -290,6 +640,15 @@ func copyToolResults(input map[string]string) map[string]string {
 	for k, v := range input {
 		out[k] = v
 	}
+	return out
+}
+
+func copyToolTimeline(input []ToolExecution) []ToolExecution {
+	if len(input) == 0 {
+		return []ToolExecution{}
+	}
+	out := make([]ToolExecution, len(input))
+	copy(out, input)
 	return out
 }
 

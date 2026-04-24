@@ -147,6 +147,38 @@ const onOpenMap = (comp) => {
 	overflow: hidden;
 }
 
+/* Chat-only override: allow embedded DashboardComponent charts to grow naturally. */
+.component-card :deep(.dashboardcomponent) {
+	height: auto !important;
+	max-height: none !important;
+	min-height: 0;
+}
+
+.component-card :deep(.dashboardcomponent-chart),
+.component-card :deep(.dashboardcomponent-loading),
+.component-card :deep(.dashboardcomponent-error) {
+	height: auto !important;
+	max-height: none !important;
+	overflow-y: hidden !important;
+	overflow-x: auto !important;
+}
+
+.component-card :deep(.vue-apexcharts) {
+	width: 100% !important;
+	min-height: 0 !important;
+	overflow: visible !important;
+}
+
+.component-card :deep(.apexcharts-canvas),
+.component-card :deep(.apexcharts-svg) {
+	max-width: 100% !important;
+}
+
+.component-card :deep(.apexcharts-legend) {
+	overflow: visible !important;
+	max-height: none !important;
+}
+
 
 .map-focus-card {
 	background: rgba(16, 185, 129, 0.08);

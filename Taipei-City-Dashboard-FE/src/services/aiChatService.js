@@ -13,6 +13,23 @@ import { getComponentDataTimeframe } from "../assets/utilityFunctions/dataTimefr
 
 const MAX_CONTEXT_MESSAGES = 12;
 const TWAI_MAX_RETRY = 2;
+const TWAI_SESSION_KEY = 'twai_session_id';
+
+const createRandomSessionPart = () => {
+	if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+		return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+	}
+	return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const getTwaiSessionId = () => {
+	const current = sessionStorage.getItem(TWAI_SESSION_KEY);
+	if (current) return current;
+
+	const sessionId = `session_${createRandomSessionPart()}`;
+	sessionStorage.setItem(TWAI_SESSION_KEY, sessionId);
+	return sessionId;
+};
 
 // ═══════════════════════════════════════════════════════════════════
 // 工具函數：文字處理
@@ -26,6 +43,26 @@ export const normalizeText = (text = '') =>
 export const isDirectComponentIntent = (query = '') => {
 	const q = String(query || '');
 	return /組件|元件|顯示|查看|打開|我要看|幫我找|扶養比及老化指數|長照指標/.test(q);
+};
+
+export const buildTwaiFallbackNotice = (reason) => {
+	const code = String(reason || 'UNKNOWN');
+	if (code === 'HTTP_429') {
+		return `AI 對話服務目前流量較高（${code}），已自動切換為組件推薦模式。`;
+	}
+	if (code === 'NETWORK_OR_TIMEOUT') {
+		return `AI 對話連線逾時或網路不穩（${code}），已自動切換為組件推薦模式。`;
+	}
+	if (code === 'EMPTY_CONTENT' || code === 'EMPTY_RESPONSE') {
+		return `AI 對話本次未產生可用內容（${code}），已自動切換為組件推薦模式。`;
+	}
+	if (/^HTTP_4\d\d$/.test(code)) {
+		return `AI 對話請求未通過（${code}），已自動切換為組件推薦模式。`;
+	}
+	if (/^HTTP_5\d\d$/.test(code)) {
+		return `AI 對話服務回應異常（${code}），已自動切換為組件推薦模式。`;
+	}
+	return `AI 對話暫時不可用（${code}），已自動切換為組件推薦模式。`;
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -314,33 +351,36 @@ export const buildFallbackScene = (question = '', components = [], preferredMode
 	})();
 
 	const buildPresentationSlides = () => {
-		const headline = normalizedQuestion.slice(0, 30) || '城市議題展示';
-		const heroSlide = {
-			id: 'hero',
-			type: 'hero',
-			title: `${headline} 即時展示`,
-			subtitle: '由 AI Agent 自動編排內容與節奏，適合校園與政府看板。',
-			durationSec: 10,
-		};
-
-		const componentSlides = safeComponents.slice(0, 4).map((item, index) => ({
-			id: `component-${item?.id || index}`,
-			type: 'component',
-			title: item?.name || `重點指標 ${index + 1}`,
-			subtitle: item?.dashboardConfig?.short_desc || 'AI 選出的高相關指標畫面。',
-			focusComponentId: item?.id,
-			durationSec: 12,
-		}));
-
-		const closingSlide = {
-			id: 'closing',
-			type: 'closing',
-			title: '持續追蹤與即時更新',
-			subtitle: '更多資料與互動分析請至 Taipei City Dashboard。',
-			durationSec: 8,
-		};
-
-		return [heroSlide, ...componentSlides, closingSlide];
+		// 戰情室模式：直接產生所有組件投影片，無首頁/尾頁包裝
+		// 若組件有多種圖表類型，各展開一張投影片
+		const slides = [];
+		safeComponents.forEach((item, index) => {
+			const types = item?.dashboardConfig?.chart_config?.types;
+			if (Array.isArray(types) && types.length > 1) {
+				types.forEach((chartType) => {
+					slides.push({
+						id: `component-${item?.id || index}-${chartType}`,
+						type: 'component',
+						title: item?.name || `重點指標 ${index + 1}`,
+						subtitle: item?.dashboardConfig?.short_desc || 'AI 選出的高相關指標畫面。',
+						focusComponentId: item?.id,
+						chartType,
+						durationSec: 12,
+					});
+				});
+			} else {
+				slides.push({
+					id: `component-${item?.id || index}`,
+					type: 'component',
+					title: item?.name || `重點指標 ${index + 1}`,
+					subtitle: item?.dashboardConfig?.short_desc || 'AI 選出的高相關指標畫面。',
+					focusComponentId: item?.id,
+					chartType: Array.isArray(types) ? types[0] : undefined,
+					durationSec: 12,
+				});
+			}
+		});
+		return slides;
 	};
 
 	return {
@@ -405,13 +445,85 @@ export const resolveSceneFromAI = (question = '', aiRawContent = '', components 
 	return buildFallbackScene(question, components, preferredMode);
 };
 
+export const resolveSceneFromDisplayPlan = (question = '', displayPlan = null, components = []) => {
+	if (!displayPlan || typeof displayPlan !== 'object') {
+		return null;
+	}
+
+	const safeComponents = Array.isArray(components) ? components : [];
+	const mode = ['components', 'map', 'web', 'presentation'].includes(displayPlan.mode)
+		? displayPlan.mode
+		: 'presentation';
+
+	const slides = Array.isArray(displayPlan.slides)
+		? displayPlan.slides.map((slide, index) => ({
+			id: slide?.id || `plan-${index + 1}`,
+			type: slide?.type || 'component',
+			title: slide?.title || `投影片 ${index + 1}`,
+			subtitle: slide?.summary || '',
+			focusComponentId: slide?.focus_component_id || undefined,
+			chartType: slide?.chart_type || undefined,
+			durationSec: Number(slide?.duration_sec) > 0 ? Number(slide.duration_sec) : 12,
+		}))
+		: [];
+
+	const blocks = Array.isArray(displayPlan.blocks)
+		? displayPlan.blocks.map((block) => ({
+			type: block?.type || 'component',
+			title: block?.title || '未命名區塊',
+			componentId: block?.component_id,
+			componentIndex: block?.component_index,
+			city: block?.city || safeComponents[0]?.city || 'taipei',
+			chartType: block?.chart_type || displayPlan.chart_preference || 'auto',
+			summary: block?.summary || '',
+		}))
+		: [];
+
+	const sceneTitle = String(question || '').trim()
+		? `AI 展示規劃：${String(question).slice(0, 30)}`
+		: 'AI 展示規劃';
+
+	return {
+		version: '1.0',
+		title: sceneTitle,
+		objective: '由 AI Agent 產生展示策略與播放順序',
+		layout: {
+			type: 'split',
+			leftPanel: {
+				collapsed: false,
+				width: 380,
+			},
+			rightPanel: {
+				mode,
+			},
+		},
+		presentation: {
+			style: typeof displayPlan.style === 'string' ? displayPlan.style : 'carousel',
+			autoplay: {
+				enabled: mode === 'presentation',
+				intervalMs: 10000,
+			},
+			audience: displayPlan.audience || 'public-screen',
+			industry: 'general',
+			strictRender: Boolean(displayPlan.strict_render),
+			slides,
+		},
+		blocks,
+		meta: {
+			city: safeComponents[0]?.city || 'taipei',
+			theme: 'default',
+			updatedAt: new Date().toISOString(),
+		},
+	};
+};
+
 // ═══════════════════════════════════════════════════════════════════
 // TWAI API 相關
 // ═══════════════════════════════════════════════════════════════════
 
 export const buildTwaiMessages = (latestUserInput, chatHistory = [], includeHistory = true) => {
 	const systemPrompt =
-		'你是臺北城市儀表板小幫手。回覆對象是一般使用者，不是工程師。若使用者在查某個指標、圖表、組件或想看資料，必須先呼叫 retrieve_components_by_query 再回答。取得檢索結果後，請自行整合成自然、完整、可直接理解的繁體中文答案，優先指出最值得先看的圖表與原因，必要時再補充 1 到 3 個延伸指標。不要暴露 RAG、tool、score、index、id、主結果、候選、檢索排序等中繼資訊。若沒有合適結果，直接用白話說明限制並提供下一步建議。';
+		'你是臺北城市儀表板小幫手。回覆對象是一般使用者，不是工程師。若使用者在查某個指標、圖表、組件或想看資料，必須先呼叫 retrieve_components_by_query，再呼叫 get_component_chart_data 取得實際資料後才能回答。當問題涉及數值、比較、趨勢、最近變化時，答案一定要帶出具體數值與對應時間區間。不要暴露 RAG、tool、score、index、id、主結果、候選、檢索排序等中繼資訊。若沒有合適結果，直接用白話說明限制並提供下一步建議。';
 
 	if (!includeHistory) {
 		return [
@@ -445,6 +557,28 @@ export const buildTwaiMessages = (latestUserInput, chatHistory = [], includeHist
 	];
 };
 
+export const stripDisplayPlanBlock = (content = '') => {
+	const text = String(content || '').trim();
+	if (!text) return '';
+
+	const jsonFenceIndex = text.indexOf('```json');
+	if (jsonFenceIndex >= 0) {
+		const prefix = text.slice(0, jsonFenceIndex).trim();
+		if (prefix) return prefix;
+	}
+
+	const modeIndex = text.indexOf('"mode"');
+	if (modeIndex > 0) {
+		const braceIndex = text.lastIndexOf('{', modeIndex);
+		if (braceIndex >= 0) {
+			const prefix = text.slice(0, braceIndex).trim();
+			if (prefix) return prefix;
+		}
+	}
+
+	return text;
+};
+
 export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 	const shouldRetry = (error) => {
 		const status = error?.response?.status;
@@ -455,10 +589,7 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 	const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 	const createPayload = (includeHistory = true) => ({
-		session: (() => {
-			const d = new Date();
-			return `session_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-		})(),
+		session: getTwaiSessionId(),
 		app_mode: options.appMode || '',
 		stream: false,
 		messages: buildTwaiMessages(question, chatHistory, includeHistory),
@@ -478,6 +609,23 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 							score: { type: 'number', minimum: 0, maximum: 1 },
 						},
 						required: ['query'],
+					},
+				},
+			},
+			{
+				type: 'function',
+				function: {
+					name: 'get_component_chart_data',
+					description: 'Get chart data for a dashboard component by component_id and city',
+					parameters: {
+						type: 'object',
+						properties: {
+							component_id: { type: 'integer' },
+							city: { type: 'string', enum: ['taipei', 'metrotaipei'] },
+							time_from: { type: 'string', description: 'ISO-8601 time format, e.g. 2026-04-01T00:00:00+08:00' },
+							time_to: { type: 'string', description: 'ISO-8601 time format, e.g. 2026-04-24T23:59:59+08:00' },
+						},
+						required: ['component_id'],
 					},
 				},
 			},
@@ -538,17 +686,20 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 		const answerMode = response.data.data.answer_mode || 'agent_chat';
 		const tools = Array.isArray(response.data.data.tools) ? response.data.data.tools : [];
 		const agentResult = response.data.data.agent_result || null;
+		const displayPlan = response.data.data.display_plan || null;
 
 		if (!content || !String(content).trim()) {
 			return { ok: false, reason: 'EMPTY_CONTENT' };
 		}
 
+		const cleanContent = stripDisplayPlanBlock(String(content));
 		return {
 			ok: true,
-			content: String(content),
+			content: cleanContent || String(content),
 			answerMode,
 			tools,
 			agentResult,
+			displayPlan,
 		};
 	} catch (error) {
 		const status = error?.response?.status;
@@ -561,13 +712,16 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 			const minimalAnswerMode = minimalResp?.data?.data?.answer_mode || 'agent_chat';
 			const minimalTools = Array.isArray(minimalResp?.data?.data?.tools) ? minimalResp.data.data.tools : [];
 			const minimalAgentResult = minimalResp?.data?.data?.agent_result || null;
+			const minimalDisplayPlan = minimalResp?.data?.data?.display_plan || null;
 			if (minimalContent && String(minimalContent).trim()) {
+				const cleanMinimalContent = stripDisplayPlanBlock(String(minimalContent));
 				return {
 					ok: true,
-					content: String(minimalContent),
+					content: cleanMinimalContent || String(minimalContent),
 					answerMode: minimalAnswerMode,
 					tools: minimalTools,
 					agentResult: minimalAgentResult,
+					displayPlan: minimalDisplayPlan,
 				};
 			}
 		} catch (minimalError) {
@@ -584,45 +738,49 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 
 export const queryByVector = async (question) => {
 	try {
-		const response = await http.post(
-			"/vector/component",
-			new URLSearchParams({
-				query: question,
-				limit: 10,
-				score: 0.8,
-			}),
-			{
-				headers: {
-					"Content-Type": "application/x-www-form-urlencoded",
-				},
-			}
-		);
+		const scoreCandidates = [0.8, 0.78, 0.72];
 
-		if (response.data?.data?.length > 0) {
-			let results = response.data.data.filter(isOfficialComponent);
-
-			// 去除重複項目存到 result
-			const deduplicated = Array.from(
-				results.reduce((map, item) => {
-					const key = item.index;
-					const exist = map.get(key);
-
-					// 如果還沒放過，直接放
-					if (!exist) {
-						map.set(key, item);
-						return map;
-					}
-
-					// 如果已存在，但現在的是 metrotaipei，就覆蓋
-					if (item.city === 'metrotaipei') {
-						map.set(key, item);
-					}
-
-					return map;
-				}, new Map()).values()
+		for (const score of scoreCandidates) {
+			const response = await http.post(
+				"/vector/component",
+				new URLSearchParams({
+					query: question,
+					limit: 10,
+					score,
+				}),
+				{
+					headers: {
+						"Content-Type": "application/x-www-form-urlencoded",
+					},
+				}
 			);
 
-			return deduplicated.sort((a, b) => b.score - a.score);
+			if (response.data?.data?.length > 0) {
+				let results = response.data.data.filter(isOfficialComponent);
+
+				// 去除重複項目存到 result
+				const deduplicated = Array.from(
+					results.reduce((map, item) => {
+						const key = item.index;
+						const exist = map.get(key);
+
+						// 如果還沒放過，直接放
+						if (!exist) {
+							map.set(key, item);
+							return map;
+						}
+
+						// 如果已存在，但現在的是 metrotaipei，就覆蓋
+						if (item.city === 'metrotaipei') {
+							map.set(key, item);
+						}
+
+						return map;
+					}, new Map()).values()
+				);
+
+				return deduplicated.sort((a, b) => b.score - a.score);
+			}
 		}
 
 		return [];

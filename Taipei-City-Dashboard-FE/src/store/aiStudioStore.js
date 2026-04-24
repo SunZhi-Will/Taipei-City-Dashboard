@@ -23,6 +23,7 @@ const buildDefaultScene = () => ({
 			enabled: true,
 			intervalMs: 10000,
 		},
+		strictRender: false,
 		audience: "public-screen",
 		industry: "general",
 		slides: [],
@@ -77,6 +78,10 @@ const sanitizeScene = (scene) => {
 						? scene.presentation.autoplay.intervalMs
 						: fallback.presentation.autoplay.intervalMs,
 			},
+			strictRender:
+				typeof scene?.presentation?.strictRender === "boolean"
+					? scene.presentation.strictRender
+					: fallback.presentation.strictRender,
 			audience:
 				typeof scene?.presentation?.audience === "string"
 					? scene.presentation.audience

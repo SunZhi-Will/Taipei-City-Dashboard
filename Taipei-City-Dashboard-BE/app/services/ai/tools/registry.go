@@ -18,6 +18,7 @@ func init() {
 	Register("get_current_time", GetCurrentTime)
 	Register("get_population_summary", GetPopulationSummary)
 	Register("retrieve_components_by_query", RetrieveComponentsByQuery)
+	Register("get_component_chart_data", GetComponentChartData)
 }
 
 // Register adds a tool to the registry
@@ -45,6 +46,14 @@ type ComponentRetrieveArgs struct {
 	Query string  `json:"query"`
 	Limit int     `json:"limit"`
 	Score float64 `json:"score"`
+}
+
+// ComponentChartDataArgs defines arguments for component chart data tool.
+type ComponentChartDataArgs struct {
+	ComponentID int    `json:"component_id"`
+	City        string `json:"city"`
+	TimeFrom    string `json:"time_from"`
+	TimeTo      string `json:"time_to"`
 }
 
 // GetPopulationSummary queries the population age distribution from the dashboard database
@@ -139,23 +148,104 @@ func RetrieveComponentsByQuery(ctx context.Context, args string) (string, error)
 		return string(payload), nil
 	}
 
-	// Fallback to dashboard components if Vue component search returns nothing
-	results, err := models.GetComponentByQueryVector(params.Query, params.Limit, params.Score)
+	// Use rich retrieval so AI knows chart_types and has_map for each component
+	richResults, err := models.GetComponentByQueryVectorRich(params.Query, params.Limit, params.Score)
 	if err != nil {
 		return "", fmt.Errorf("vector retrieval failed: %v", err)
 	}
 
 	payload, err := json.Marshal(map[string]interface{}{
 		"query":   params.Query,
-		"count":   len(results),
+		"count":   len(richResults),
 		"type":    "dashboard_components",
-		"results": results,
+		"results": richResults,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal tool result: %v", err)
 	}
 
 	return string(payload), nil
+}
+
+// GetComponentChartData fetches chart data for a specific dashboard component.
+func GetComponentChartData(ctx context.Context, args string) (string, error) {
+	_ = ctx
+
+	var params ComponentChartDataArgs
+	if err := parseArgs(args, &params); err != nil {
+		return "", fmt.Errorf("invalid arguments: %v", err)
+	}
+
+	if params.ComponentID <= 0 {
+		return "", fmt.Errorf("component_id is required")
+	}
+
+	if params.City != "metrotaipei" && params.City != "taipei" {
+		params.City = "taipei"
+	}
+
+	loc, _ := time.LoadLocation("Asia/Taipei")
+	now := time.Now().In(loc)
+	if params.TimeTo == "" {
+		params.TimeTo = now.Format("2006-01-02T15:04:05+08:00")
+	}
+	if params.TimeFrom == "" {
+		params.TimeFrom = now.AddDate(0, 0, -30).Format("2006-01-02T15:04:05+08:00")
+	}
+
+	queryType, queryString, err := models.GetComponentChartDataQuery(params.ComponentID, params.City)
+	if err != nil {
+		return "", fmt.Errorf("failed to get component chart query: %v", err)
+	}
+	if queryType == "" || queryString == "" {
+		return "", fmt.Errorf("no chart data available for component_id=%d city=%s", params.ComponentID, params.City)
+	}
+
+	payload := map[string]interface{}{
+		"type":         "component_chart_data",
+		"component_id": params.ComponentID,
+		"city":         params.City,
+		"query_type":   queryType,
+		"time_from":    params.TimeFrom,
+		"time_to":      params.TimeTo,
+	}
+
+	switch queryType {
+	case "two_d":
+		chartData, err := models.GetTwoDimensionalData(&queryString, params.TimeFrom, params.TimeTo)
+		if err != nil {
+			return "", fmt.Errorf("failed to get two_d chart data: %v", err)
+		}
+		payload["data"] = chartData
+	case "three_d", "percent":
+		chartData, categories, err := models.GetThreeDimensionalData(&queryString, params.TimeFrom, params.TimeTo)
+		if err != nil {
+			return "", fmt.Errorf("failed to get three_d chart data: %v", err)
+		}
+		payload["data"] = chartData
+		payload["categories"] = categories
+	case "time":
+		chartData, err := models.GetTimeSeriesData(&queryString, params.TimeFrom, params.TimeTo)
+		if err != nil {
+			return "", fmt.Errorf("failed to get time series data: %v", err)
+		}
+		payload["data"] = chartData
+	case "map_legend":
+		chartData, err := models.GetMapLegendData(&queryString, params.TimeFrom, params.TimeTo)
+		if err != nil {
+			return "", fmt.Errorf("failed to get map legend data: %v", err)
+		}
+		payload["data"] = chartData
+	default:
+		return "", fmt.Errorf("unsupported query_type: %s", queryType)
+	}
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal chart data: %v", err)
+	}
+
+	return string(raw), nil
 }
 
 // Helper to parse JSON arguments if needed in future tools

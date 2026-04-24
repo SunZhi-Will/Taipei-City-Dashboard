@@ -4,18 +4,19 @@
 --   Docker：  docker exec -i postgres-data psql -U <user> -d dashboard < verify_data_moenv_air_quality.sql
 --
 -- 備註：postgres-data 預設沒有對外曝 port，必須走 docker exec
+-- 備註：目前 02_deploy_air_quality_data.sql 會匯入 6 筆示範資料，時間欄位為 update_time
 
 \echo === 1) 表的存在性與資料筆數 ===
 SELECT
-  COUNT(*)                                                       AS total_rows,
-  COUNT(*) FILTER (WHERE data_time > NOW() - INTERVAL '2 hour')  AS rows_in_last_2h,
-  MAX(data_time)                                                 AS latest_data_time,
-  MIN(data_time)                                                 AS earliest_data_time
+  COUNT(*)                                                         AS total_rows,
+  COUNT(*) FILTER (WHERE update_time > NOW() - INTERVAL '2 hour')  AS rows_in_last_2h,
+  MAX(update_time)                                                 AS latest_update_time,
+  MIN(update_time)                                                 AS earliest_update_time
 FROM public.moenv_air_quality;
 
 \echo
 \echo === 2) 雙北測站清單（會在地圖顯示的點位） ===
-SELECT site_name, county, aqi, status, pollutant, pm_2point5_ug_m3, data_time
+SELECT site_name, district, county, aqi, status, update_time
 FROM public.moenv_air_quality
 ORDER BY county, site_name;
 
@@ -26,6 +27,6 @@ FROM public.moenv_air_quality;
 
 \echo
 \echo ✅ 驗收標準：
-\echo   - total_rows ≥ 10（雙北測站約 10-15 個）
-\echo   - rows_in_last_2h ≥ 1（DAG 最近 2 小時有跑過）
+\echo   - total_rows = 6（當前 migration 匯入 6 筆雙北示範測站）
+\echo   - rows_in_last_2h ≥ 1（剛執行 migration 後應成立）
 \echo   - srid = 4326

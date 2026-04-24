@@ -2,9 +2,78 @@
 import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import ChatResultComponents from "../dialogs/ChatResultComponents.vue";
 import ChatComposer from "../dialogs/chat/ChatComposer.vue";
 import SuggestedTagsBar from "../dialogs/chat/SuggestedTagsBar.vue";
+
+marked.setOptions({ breaks: true });
+const renderMarkdown = (text) => {
+	const raw = String(text || "").trim();
+	if (!raw) return "";
+
+	const sanitizedHtml = DOMPurify.sanitize(marked.parse(raw));
+	if (!sanitizedHtml.includes("<table")) return sanitizedHtml;
+
+	const wrapper = document.createElement("div");
+	wrapper.innerHTML = sanitizedHtml;
+
+	for (const table of wrapper.querySelectorAll("table")) {
+		table.classList.add("ai-table");
+
+		if (!table.parentElement?.classList.contains("ai-table-wrapper")) {
+			const tableWrapper = document.createElement("div");
+			tableWrapper.className = "ai-table-wrapper";
+			table.insertAdjacentElement("beforebegin", tableWrapper);
+			tableWrapper.appendChild(table);
+		}
+
+		const extractedParagraphs = [];
+
+		for (const row of table.querySelectorAll("tbody tr")) {
+			const cells = Array.from(row.querySelectorAll("td"));
+			if (cells.length < 2) continue;
+
+			const firstCellText = (cells[0]?.textContent || "").trim();
+			const hasOnlyFirstCellContent = cells.slice(1).every((cell) => !(cell.textContent || "").trim());
+			const looksLikeParagraph = /[，。！？；：]/.test(firstCellText) && firstCellText.length >= 18;
+
+			if (hasOnlyFirstCellContent && looksLikeParagraph) {
+				extractedParagraphs.push(firstCellText);
+				row.remove();
+			}
+		}
+
+		if (extractedParagraphs.length > 0 && table.parentElement) {
+			const tableWrapper = table.parentElement.classList.contains("ai-table-wrapper")
+				? table.parentElement
+				: table;
+			let anchor = tableWrapper;
+			for (const paragraphText of extractedParagraphs) {
+				const paragraph = document.createElement("p");
+				paragraph.className = "acp__table-followup";
+				paragraph.textContent = paragraphText;
+				anchor.insertAdjacentElement("afterend", paragraph);
+				anchor = paragraph;
+			}
+		}
+
+		const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
+		const hasAnyBodyText = bodyRows.some((row) =>
+			Array.from(row.querySelectorAll("td")).some((cell) => (cell.textContent || "").trim()),
+		);
+		if (!hasAnyBodyText) {
+			const parent = table.parentElement;
+			table.remove();
+			if (parent?.classList.contains("ai-table-wrapper") && !parent.children.length) {
+				parent.remove();
+			}
+		}
+	}
+
+	return wrapper.innerHTML;
+};
 
 import { useAiStudioChatStore } from "../../store/aiStudioChatStore";
 import { useContentStore } from "../../store/contentStore";
@@ -187,12 +256,12 @@ const onScroll = () => {
           class="acp__row acp__row--bot"
         >
           <div class="acp__bot-block">
-            <p
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div
               v-if="chat.content"
-              class="acp__bot-text"
-            >
-              {{ chat.content }}
-            </p>
+              class="acp__bot-text acp__bot-markdown"
+              v-html="renderMarkdown(chat.content)"
+            />
             <ChatResultComponents
               v-if="chat.components && chat.components.length > 0"
               :components="chat.components"
@@ -353,7 +422,8 @@ $t: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 
 	/* ── Bot block ────────────────────────────── */
 	&__bot-block {
-		max-width: 92%;
+		width: 100%;
+		max-width: 100%;
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
@@ -368,6 +438,93 @@ $t: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 		margin: 0;
 	}
 
+	&__bot-markdown {
+		display: block;
+		width: 100%;
+		white-space: normal;
+
+		// Markdown 基本排版
+		p { margin: 0 0 0.4em; line-height: 1.7; }
+		strong { font-weight: 600; color: $text; }
+		em { font-style: italic; }
+		ul, ol { margin: 0.3em 0 0.3em 1.2em; padding: 0; }
+		li { margin-bottom: 2px; }
+
+		// 表格樣式（對齊 ChatBox 結構）
+		:deep(.ai-table-wrapper) {
+			display: block;
+			width: 100%;
+			min-width: 100%;
+			margin: 0.5em 0 0.35em;
+			inline-size: 100%;
+			max-inline-size: 100%;
+			overflow-x: auto;
+			overflow-y: hidden;
+			border-radius: 6px;
+			border: 1px solid rgba(255, 255, 255, 0.12);
+			box-sizing: border-box;
+		}
+
+		:deep(.ai-table) {
+			display: table;
+			width: 100%;
+			min-width: 100%;
+			max-width: 100%;
+			border-collapse: collapse;
+			table-layout: fixed;
+			font-size: 0.8rem;
+			border: 1px solid rgba(255, 255, 255, 0.28);
+			box-sizing: border-box;
+
+			th, td {
+				padding: 6px 10px;
+				border: 1px solid rgba(255, 255, 255, 0.22);
+				text-align: left;
+				white-space: normal;
+				overflow-wrap: anywhere;
+				word-break: break-word;
+				vertical-align: top;
+			}
+
+			th:nth-child(1), td:nth-child(1) {
+				width: 56px;
+				white-space: nowrap;
+			}
+
+			th:nth-child(2), td:nth-child(2) {
+				width: 84px;
+				white-space: nowrap;
+			}
+
+			th:last-child, td:last-child { width: calc(100% - 140px); }
+
+			th {
+				background: rgba(255, 255, 255, 0.09);
+				color: $text;
+				font-weight: 600;
+				letter-spacing: 0.02em;
+			}
+
+			tr:nth-child(even) td { background: rgba(255, 255, 255, 0.04); }
+			tr:hover td { background: rgba(90, 156, 248, 0.08); transition: background 0.15s; }
+		}
+
+		:deep(.acp__table-followup) {
+			margin: 0.25em 0 0;
+			line-height: 1.65;
+			color: $text;
+		}
+
+		// 行內程式碼
+		code {
+			background: rgba(255, 255, 255, 0.1);
+			border-radius: 3px;
+			padding: 1px 5px;
+			font-family: monospace;
+			font-size: 0.85em;
+		}
+	}
+
 	/* ── Bot avatar ───────────────────────────── */
 	&__bot-avatar {
 		flex-shrink: 0;
@@ -379,9 +536,10 @@ $t: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 
 	/* ── User bubble ──────────────────────────── */
 	&__user-bubble {
+		display: inline-block;
 		max-width: 80%;
 		min-width: 0;
-		background: linear-gradient(135deg, rgba(53, 62, 74, 0.96) 0%, rgba(44, 51, 62, 0.96) 100%);
+		background: #6b7280;
 		border: 1px solid rgba(255, 255, 255, 0.22);
 		border-radius: 16px 6px 16px 16px;
 		padding: 9px 13px;

@@ -69,6 +69,10 @@ const formattedTimeToUpdate = computed(() => {
 	return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
 });
 
+const isAIStudioImmersive = computed(() => {
+	return authStore.currentPath === "ai-studio" && route.query.fullscreen === "1";
+});
+
 const shouldShowChatWidget = computed(() => {
 	return ["dashboard", "mapview"].includes(authStore.currentPath);
 });
@@ -159,18 +163,18 @@ function reload3DMRTMapData() {
 }
 
 const navItems = [
-  { name: "儀表板", icon: "dashboard", path: "/dashboard", id: "dashboard" },
-  { name: "地圖", icon: "map", path: "/mapview", id: "mapview" },
-  { name: "組件", icon: "widgets", path: "/component", id: "component", auth: true },
-  { name: "AI", icon: "psychology", path: "/ai-studio", id: "ai-studio" }
+	{ name: "儀表板", icon: "dashboard", path: "/dashboard", id: "dashboard" },
+	{ name: "地圖", icon: "map", path: "/mapview", id: "mapview" },
+	{ name: "組件", icon: "widgets", path: "/component", id: "component", auth: true },
+	{ name: "AI", icon: "psychology", path: "/ai-studio", id: "ai-studio" }
 ];
 
 const filteredNavItems = computed(() => {
-  return navItems.filter(item => !item.auth || authStore.token);
+	return navItems.filter(item => !item.auth || authStore.token);
 });
 
 const isNavItemActive = (itemId) => {
-  return authStore.currentPath.includes(itemId);
+	return authStore.currentPath.includes(itemId);
 };
 
 (watch(
@@ -231,7 +235,8 @@ onBeforeUnmount(() => {
     <NavBar
       v-if="
         authStore.currentPath !== 'embed' &&
-          authStore.currentPath !== 'mapview'
+				authStore.currentPath !== 'mapview' &&
+				!isAIStudioImmersive
       "
     />
     
@@ -284,7 +289,7 @@ onBeforeUnmount(() => {
 
     <!-- Bottom Nav for Mobile -->
     <nav 
-      v-if="authStore.isNarrowDevice && authStore.currentPath !== 'embed'"
+			v-if="authStore.isNarrowDevice && authStore.currentPath !== 'embed' && !isAIStudioImmersive"
       class="app-bottom-nav"
     >
       <router-link
