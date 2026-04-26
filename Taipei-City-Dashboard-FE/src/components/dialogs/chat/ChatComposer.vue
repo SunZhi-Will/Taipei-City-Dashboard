@@ -20,6 +20,15 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue", "send"]);
 
 const chatInputRef = ref(null);
+const isComposing = ref(false);
+
+const onCompositionStart = () => {
+	isComposing.value = true;
+};
+
+const onCompositionEnd = () => {
+	isComposing.value = false;
+};
 
 const resizeInput = () => {
 	const input = chatInputRef.value;
@@ -36,6 +45,7 @@ const onInput = (event) => {
 
 const onInputKeydown = (event) => {
 	if (event.key === "Enter" && !event.shiftKey) {
+		if (isComposing.value) return;
 		event.preventDefault();
 		emit("send");
 	}
@@ -43,7 +53,10 @@ const onInputKeydown = (event) => {
 
 watch(
 	() => props.modelValue,
-	async () => {
+	async (newVal) => {
+		if (chatInputRef.value && chatInputRef.value.value !== newVal) {
+			chatInputRef.value.value = newVal;
+		}
 		await nextTick();
 		resizeInput();
 	},
@@ -61,7 +74,7 @@ onMounted(() => {
   >
     <textarea
       ref="chatInputRef"
-      :model-value="modelValue"
+      :value="modelValue"
       class="chat-input"
       :class="{ 'chat-input--compact': compact }"
       rows="1"
@@ -70,6 +83,8 @@ onMounted(() => {
       :disabled="isResponding"
       @input="onInput"
       @keydown="onInputKeydown"
+      @compositionstart="onCompositionStart"
+      @compositionend="onCompositionEnd"
     />
     <button
       type="button"

@@ -125,7 +125,9 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 						answerMode: twaiResult.answerMode,
 						selectionReason: twaiResult.agentResult?.selection_reason,
 						usedTools: twaiResult.tools,
+						toolTimeline: twaiResult.toolTimeline,
 						displayPlan: twaiResult.displayPlan || undefined,
+						meta: twaiResult.meta,
 						scene:
 							plannedScene ||
 							resolveSceneFromAI(

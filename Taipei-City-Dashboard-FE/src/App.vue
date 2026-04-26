@@ -32,6 +32,9 @@ import InitialWarning from "./components/dialogs/InitialWarning.vue";
 import ComponentSideBar from "./components/utilities/bars/ComponentSideBar.vue";
 import LogIn from "./components/dialogs/LogIn.vue";
 import ChatWidgetMount from "./components/chat/ChatWidgetMount.vue";
+// AI 思考流程對話框
+import AITraceDialog from "./components/dialogs/AITraceDialog.vue";
+
 
 const authStore = useAuthStore();
 const dialogStore = useDialogStore();
@@ -307,6 +310,7 @@ onBeforeUnmount(() => {
     <InitialWarning />
     <LogIn />
     <ChatWidgetMount v-if="shouldShowChatWidget" />
+    <AITraceDialog />
   </div>
 </template>
 

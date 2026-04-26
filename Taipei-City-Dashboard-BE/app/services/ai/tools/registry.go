@@ -240,6 +240,46 @@ func GetComponentChartData(ctx context.Context, args string) (string, error) {
 		return "", fmt.Errorf("unsupported query_type: %s", queryType)
 	}
 
+	// Generate a summary for the AI to easily fill tables
+	summary := ""
+	switch queryType {
+	case "two_d":
+		if data, ok := payload["data"].([]models.TwoDimensionalDataOutput); ok && len(data) > 0 && len(data[0].Data) > 0 {
+			last := data[0].Data[len(data[0].Data)-1]
+			summary = fmt.Sprintf("最新數值: %.1f", last.Data)
+		}
+	case "three_d", "percent":
+		if data, ok := payload["data"].([]models.ThreeDimensionalDataOutput); ok && len(data) > 0 {
+			var total float64
+			var count int
+			for _, series := range data {
+				for _, val := range series.Data {
+					total += float64(val)
+					count++
+				}
+			}
+			if count > 0 {
+				avg := total / float64(count)
+				summary = fmt.Sprintf("平均值: %.1f", avg)
+				if len(data) == 1 && len(data[0].Data) == 1 {
+					summary = fmt.Sprintf("數值: %d", data[0].Data[0])
+				}
+			}
+		}
+	case "map_legend":
+		if data, ok := payload["data"].([]models.MapLegendData); ok && len(data) > 0 {
+			var total float64
+			for _, item := range data {
+				total += item.Value
+			}
+			avg := total / float64(len(data))
+			summary = fmt.Sprintf("平均值: %.1f", avg)
+		}
+	}
+	if summary != "" {
+		payload["summary"] = summary
+	}
+
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal chart data: %v", err)

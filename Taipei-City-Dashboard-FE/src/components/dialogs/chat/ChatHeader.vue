@@ -1,4 +1,10 @@
 <script setup>
+import { useAuthStore } from "../../../store/authStore";
+import { useDialogStore } from "../../../store/dialogStore";
+
+const authStore = useAuthStore();
+const dialogStore = useDialogStore();
+
 const props = defineProps({
 	showCloseButton: {
 		type: Boolean,
@@ -13,6 +19,15 @@ const emit = defineEmits(["clear", "expand", "close"]);
   <div class="header">
     <h3>臺北城市儀表板小幫手</h3>
     <div class="header-actions">
+      <button
+        v-if="authStore.user?.is_admin"
+        type="button"
+        class="action-btn trace-btn"
+        title="檢視 AI 思考流程 (管理員)"
+        @click="dialogStore.showDialog('aiTrace')"
+      >
+        <span class="material-icons-round">psychology</span>
+      </button>
       <button
         type="button"
         class="action-btn clear-btn"
@@ -118,12 +133,17 @@ $transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
 	.clear-btn,
 	.close-btn,
-	.expand-btn {
+	.expand-btn,
+	.trace-btn {
 		svg {
 			width: 16px;
 			height: 16px;
 			fill: currentColor;
 		}
+    span {
+      font-size: 18px;
+      line-height: 1;
+    }
 	}
 }
 </style>

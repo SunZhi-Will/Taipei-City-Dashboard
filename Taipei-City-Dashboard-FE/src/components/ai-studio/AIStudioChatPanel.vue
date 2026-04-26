@@ -161,8 +161,8 @@ const sendBtnHandler = async () => {
 	if (isResponding.value) return;
 	const text = userMessage.value.trim();
 	if (!text) return;
-	await addQueryData({ role: "user", content: text });
 	userMessage.value = "";
+	await addQueryData({ role: "user", content: text });
 };
 
 const clearChat = () => {

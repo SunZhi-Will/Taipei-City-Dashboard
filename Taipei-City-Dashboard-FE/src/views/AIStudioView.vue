@@ -10,15 +10,20 @@ import { useAiStudioChatStore } from "../store/aiStudioChatStore";
 import { useContentStore } from "../store/contentStore";
 import { useAIStudioStore } from "../store/aiStudioStore";
 import { useMapStore } from "../store/mapStore";
+import { useAuthStore } from "../store/authStore";
+import { useDialogStore } from "../store/dialogStore";
 
 const chatStore = useAiStudioChatStore();
 const contentStore = useContentStore();
 const aiStudioStore = useAIStudioStore();
 const mapStore = useMapStore();
+const authStore = useAuthStore();
+const dialogStore = useDialogStore();
 const route = useRoute();
 const router = useRouter();
 
 const { chatData } = storeToRefs(chatStore);
+const { user } = storeToRefs(authStore);
 const { scene } = storeToRefs(aiStudioStore);
 const webUrlInput = ref("https://www.gov.taipei/");
 
@@ -374,6 +379,14 @@ onBeforeUnmount(() => {
           AI Studio
         </span>
         <div class="aistudio-left-actions">
+          <button
+            v-if="!scene.layout.leftPanel.collapsed && user?.is_admin"
+            class="icon-btn"
+            title="檢視 AI 思考流程 (管理員)"
+            @click="dialogStore.showDialog('aiTrace')"
+          >
+            <span class="icon">psychology</span>
+          </button>
           <button
             v-if="!scene.layout.leftPanel.collapsed"
             class="icon-btn"

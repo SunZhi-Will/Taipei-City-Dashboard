@@ -122,11 +122,11 @@ const sendBtnHandler = async () => {
 	if (isResponding.value) return;
 	const normalizedText = userMessage.value.trim();
 	if (!normalizedText) return;
+	userMessage.value = "";
 	await addQueryData({
 		role: "user",
 		content: normalizedText,
 	});
-	userMessage.value = "";
 };
 
 const closeWidget = () => {

@@ -107,14 +107,14 @@ const slides = computed(() => {
 			{
 				id: "default-hero",
 				type: "hero",
-				title: props.scene?.title || "AI 展示畫面",
+				title: props.scene?.title || "AI 專題展示",
 				subtitle: props.scene?.objective || "請在左側輸入需求，AI 將自動生成輪播內容。",
 				durationSec: 10,
 			},
 		];
 	}
 
-	// 戰情室模式：有組件時直接輪播內容，無首頁包裝
+	// 戰情室模式：回歸 AI 決策，若 AI 未提供 slides 則由組件直接生成
 	return componentSlides;
 });
 

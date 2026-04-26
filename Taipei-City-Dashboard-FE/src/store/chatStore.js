@@ -119,6 +119,8 @@ export const useChatStore = defineStore('chat', () => {
 						answerMode: twaiResult.answerMode,
 						selectionReason: twaiResult.agentResult?.selection_reason,
 						usedTools: twaiResult.tools,
+						toolTimeline: twaiResult.toolTimeline,
+						meta: twaiResult.meta,
 						button: components.length > 0 ? [{ id: 1, text: '建立儀表板' }] : undefined,
 						relations: components.length > 0 ? components : undefined,
 						scene: resolveSceneFromAI(

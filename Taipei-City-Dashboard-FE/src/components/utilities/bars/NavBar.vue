@@ -94,9 +94,7 @@ const isLocalhost = computed(() => {
       </div>
     </div>
     <div
-      v-if="
-        authStore.currentPath !== 'admin'
-      "
+      v-if="authStore.currentPath !== 'admin'"
       class="navbar-tabs"
     >
       <router-link
@@ -349,20 +347,20 @@ const isLocalhost = computed(() => {
     &-tabs {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 12px;
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
       pointer-events: auto;
 
       a {
-        padding: 6px 16px;
+        padding: 8px 20px;
         display: flex;
         align-items: center;
         background: transparent;
         color: var(--color-complement-text);
         text-decoration: none;
-        font-size: var(--font-s);
+        font-size: var(--font-ms);
         font-weight: 500;
         border-radius: 999px;
         white-space: nowrap;

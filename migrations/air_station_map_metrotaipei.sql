@@ -116,7 +116,7 @@ BEGIN
     NOW(),
     NOW(),
     'three_d',
-    'SELECT district AS x_axis, county AS y_axis, aqi AS data, site_name AS name, aqi AS value, county AS type FROM public.moenv_air_quality ORDER BY county, aqi DESC',
+    'SELECT site_name AS x_axis, county AS y_axis, aqi AS data, site_name AS name, aqi AS value, county AS type FROM public.moenv_air_quality ORDER BY county, aqi DESC',
     NULL,
     'metrotaipei'
   );

@@ -523,7 +523,7 @@ export const resolveSceneFromDisplayPlan = (question = '', displayPlan = null, c
 
 export const buildTwaiMessages = (latestUserInput, chatHistory = [], includeHistory = true) => {
 	const systemPrompt =
-		'你是臺北城市儀表板小幫手。回覆對象是一般使用者，不是工程師。若使用者在查某個指標、圖表、組件或想看資料，必須先呼叫 retrieve_components_by_query，再呼叫 get_component_chart_data 取得實際資料後才能回答。當問題涉及數值、比較、趨勢、最近變化時，答案一定要帶出具體數值與對應時間區間。不要暴露 RAG、tool、score、index、id、主結果、候選、檢索排序等中繼資訊。若沒有合適結果，直接用白話說明限制並提供下一步建議。';
+		'你是臺北城市儀表板小幫手。回覆對象是一般使用者，不是工程師。若使用者在查某個指標、圖表、組件或想看資料，必須先呼叫 retrieve_components_by_query，再呼叫 get_component_chart_data 取得實際資料後才能回答。當問題涉及數值、比較、趨勢、最近變化時，答案一定要帶出具體數值與對應時間區間。組件推薦時若有 2 筆以上結果，請使用 Markdown 表格，欄位包括「排名｜城市名｜組件名｜數值」；「數值」欄位請根據工具回傳的數據填充。不要暴露 RAG、tool、score、index、id、主結果、候選、檢索排序等中繼資訊。';
 
 	if (!includeHistory) {
 		return [
@@ -698,8 +698,14 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 			content: cleanContent || String(content),
 			answerMode,
 			tools,
+			toolTimeline: response.data.data.tool_timeline || [],
 			agentResult,
 			displayPlan,
+			meta: {
+				latency_ms: response.data.data.latency_ms,
+				model: response.data.data.model,
+				usage: response.data.data.usage,
+			},
 		};
 	} catch (error) {
 		const status = error?.response?.status;
