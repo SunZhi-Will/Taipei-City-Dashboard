@@ -24,18 +24,21 @@ function isYearMonth(value) {
 	return typeof value === "string" && /^\d{4}-\d{2}/.test(value);
 }
 
-// Extract sorted months + per-month series from the time series data
-// series format: [{name: "市場A", data: [{x: "2026-04-01T...", y: 8}, ...]}]
+// Extract year-frames from time series data.
+// Each frame key is a 4-digit year ("YYYY"); within each frame, byMonth[year][seriesName] = value.
+// series format: [{name: "01月", data: [{x: "2016-01-01T...", y: 38}, ...]}]
+// All rows in the same year share the same year prefix, so slice(0,4) groups them into year frames.
 const monthlyData = computed(() => {
 	if (!props.series?.length) return { months: [], byMonth: {} };
 	const byMonth = {};
 	for (const s of props.series) {
 		for (const pt of s.data || []) {
 			if (!isYearMonth(pt.x)) continue;
-			const month = pt.x.slice(0, 7); // "YYYY-MM"
-			if (!month) continue;
-			if (!byMonth[month]) byMonth[month] = {};
-			byMonth[month][s.name] = pt.y ?? 0;
+			const year = pt.x.slice(0, 4); // "YYYY" — one frame per year
+			if (!year) continue;
+			if (!byMonth[year]) byMonth[year] = {};
+			// Use addition to handle multiple data points for the same year+series
+			byMonth[year][s.name] = (byMonth[year][s.name] ?? 0) + (pt.y ?? 0);
 		}
 	}
 	const months = Object.keys(byMonth).sort();
@@ -95,9 +98,13 @@ const animIntervalMs = computed(() => {
 	return 1500;
 });
 
-function formatMonthLabel(ym) {
-	if (!ym || !isYearMonth(ym)) return "";
-	const [y, m] = ym.split("-");
+function formatMonthLabel(key) {
+	if (!key) return "";
+	// Pure year key (e.g. "2016") — used when series data drives year-frame animation
+	if (/^\d{4}$/.test(key)) return `${key} 年`;
+	// YYYY-MM key (e.g. "2025-03") — used for map-synced month animation
+	if (!isYearMonth(key)) return "";
+	const [y, m] = key.split("-");
 	return `${y} 年 ${parseInt(m, 10)} 月`;
 }
 
@@ -124,8 +131,12 @@ const chartOptions = ref({
 			animateGradually: {
 				// Disabled: stagger delay extends total animation past the setInterval window,
 				// causing bars to be snapped mid-animation (appearing to "suddenly complete").
+				// NOTE: delay must NOT be 0 — ApexCharts computes animationDelay = barIndex / delay
+				// which gives Infinity, and Infinity * 0 (c=0 when disabled) = NaN in SVG.js.
 				enabled: false,
-				delay: 0,
+				// delay MUST NOT be 0: ApexCharts computes animationDelay = barIndex / delay
+				// With delay=0 → Infinity, then Infinity * 0 (c=0 when disabled) = NaN in SVG.js
+				delay: 150,
 			},
 			dynamicAnimation: {
 				enabled: true,

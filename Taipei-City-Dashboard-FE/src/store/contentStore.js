@@ -320,23 +320,26 @@ export const useContentStore = defineStore("content", {
 				) {
 					const component = this.cityDashboard.components[index];
 					try {
-						// 4-2. Get chart data
-						const response = await http.get(
-							`/component/${component.id}/chart`,
-							{
-								params: {
-									city: component.city,
-									...(!["static", "current", "demo"].includes(
-										component.time_from,
-									)
-										? getComponentDataTimeframe(
-												component.time_from,
-												component.time_to,
-												true,
-											)
-										: {}),
+						// 4-2. Get chart data (with retry on network/5xx errors)
+						const response = await this.requestWithRetry(
+							() => http.get(
+								`/component/${component.id}/chart`,
+								{
+									params: {
+										city: component.city,
+										...(!["static", "current", "demo"].includes(
+											component.time_from,
+										)
+											? getComponentDataTimeframe(
+													component.time_from,
+													component.time_to,
+													true,
+												)
+											: {}),
+									},
 								},
-							},
+							),
+							{ maxAttempts: 3, delayMs: 1000 },
 						);
 
 						this.cityDashboard.components[index].chart_data =
@@ -353,8 +356,8 @@ export const useContentStore = defineStore("content", {
 							`Failed to fetch chart data for component ${component.id}:`,
 							error,
 						);
-						// Set empty chart data to avoid errors in subsequent operations
-						this.cityDashboard.components[index].chart_data = [];
+						// null signals "failed to load" (distinct from [] which means genuinely no data)
+						this.cityDashboard.components[index].chart_data = null;
 
 						this.loading = false;
 					}
@@ -467,8 +470,8 @@ export const useContentStore = defineStore("content", {
 							`Failed to fetch chart data for component ${component.id}:`,
 							error,
 						);
-						// Set empty chart data to avoid errors in subsequent operations
-						this.cityDashboard.components[index].chart_data = [];
+						// null signals "failed to load" (distinct from [] which means genuinely no data)
+						this.cityDashboard.components[index].chart_data = null;
 
 						this.loading = false;
 					}

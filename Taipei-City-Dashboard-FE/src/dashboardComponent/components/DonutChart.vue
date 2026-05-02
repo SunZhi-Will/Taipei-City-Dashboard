@@ -210,10 +210,10 @@ const chartOptions = computed(() => ({
 		offsetY: 10,
 		animations: {
 			enabled: true,
-			easing: "easeinout",
+			easing: "easeout",
 			dynamicAnimation: {
 				enabled: true,
-				speed: Math.round(animIntervalMs.value * 0.8),
+				speed: Math.round(animIntervalMs.value * 0.6),
 			},
 		},
 	},
