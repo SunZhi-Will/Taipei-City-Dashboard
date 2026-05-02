@@ -1,0 +1,37 @@
+{
+    "dag_infos": {
+        "dag_id": "food_poisoning_place",
+        "start_date": "2025-01-01",
+        "schedule_interval": "0 2 1 1 *",
+        "catchup": false,
+        "tags": ["food_safety", "食藥署", "食物中毒", "taipei"],
+        "description": "Food poisoning cases by consumption location from FDA Taiwan.",
+        "default_args": {
+            "owner": "airflow",
+            "email": ["DEFAULT_EMAIL_LIST"],
+            "email_on_retry": false,
+            "email_on_failure": true,
+            "retries": 1,
+            "retry_delay": 60
+        },
+        "ready_data_db": "postgres_default",
+        "ready_data_default_table": "food_poisoning_place",
+        "ready_data_history_table": "",
+        "raw_data_db": "postgres_default",
+        "raw_data_table": "",
+        "load_behavior": "replace"
+    },
+    "data_infos": {
+        "name_cn": "食品中毒案件攝食場所案件數統計",
+        "airflow_update_freq": "02:00 1st Jan every year",
+        "source": "https://data.gov.tw/dataset/9838",
+        "source_type": "fda api",
+        "source_dept": "衛福部食品藥物管理署",
+        "gis_format": null,
+        "output_coordinate": null,
+        "is_geometry": 0,
+        "dataset_description": "歷年食品中毒案件依攝食場所（自宅/營業場所/學校等）分類統計",
+        "etl_description": "fetch FDA API, melt location columns to rows, filter single-year rows",
+        "sensitivity": "public"
+    }
+}

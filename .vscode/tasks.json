@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "docker:quick-up",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}/docker",
+        "shell": {
+          "executable": "powershell",
+          "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+        }
+      },
+      "command": "& \"${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1\" -Action quick-up",
+      "problemMatcher": []
+    },
+    {
+      "label": "docker:bootstrap-full",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}/docker",
+        "shell": {
+          "executable": "powershell",
+          "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+        }
+      },
+      "command": "& \"${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1\" -Action bootstrap-full",
+      "problemMatcher": []
+    },
+    {
+      "label": "docker:down",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}/docker",
+        "shell": {
+          "executable": "powershell",
+          "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+        }
+      },
+      "command": "& \"${workspaceFolder}\\.vscode\\scripts\\docker-task.ps1\" -Action down",
+      "problemMatcher": []
+    }
+  ]
+}
