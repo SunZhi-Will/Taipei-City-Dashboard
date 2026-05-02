@@ -25,12 +25,21 @@ const router = useRouter();
 const { chatData } = storeToRefs(chatStore);
 const { user } = storeToRefs(authStore);
 const { scene } = storeToRefs(aiStudioStore);
-const webUrlInput = ref("https://www.gov.taipei/");
+const webUrlInput = ref("");
 
+const pendingClear = ref(false);
+let pendingClearTimer = null;
 const clearChatConfirm = () => {
-	if (confirm("確定要清除所有聊天紀錄並開新的 Chat 嗎？")) {
+	if (pendingClear.value) {
+		clearTimeout(pendingClearTimer);
+		pendingClear.value = false;
 		chatStore.clearChatHistory();
+		return;
 	}
+	pendingClear.value = true;
+	pendingClearTimer = setTimeout(() => {
+		pendingClear.value = false;
+	}, 3000);
 };
 const showSceneJson = ref(false);
 const immersiveUiVisible = ref(false);
@@ -84,6 +93,23 @@ const hasMapComponents = computed(() =>
 		return Array.isArray(mapConfig) && mapConfig.length > 0 && Boolean(mapConfig[0]);
 	}),
 );
+
+// Track whether the currently active presentation slide is a map type
+const isMapSlideActive = ref(false);
+
+// True if the scene has any map slides (used to decide whether to mount MapContainer)
+const hasMapSlides = computed(() => {
+	const slides = scene.value?.presentation?.slides;
+	return Array.isArray(slides) && slides.some((s) => s?.type === 'map');
+});
+
+// MapContainer should be visible when: (a) map mode is active, or (b) presentation has active map slide
+const showPersistentMap = computed(() =>
+	selectedMode.value === 'map' || (selectedMode.value === 'presentation' && isMapSlideActive.value),
+);
+
+// MapContainer should be mounted when there's any map content
+const shouldMountMap = computed(() => hasMapComponents.value || hasMapSlides.value);
 
 const hasSceneContent = computed(() => {
 	const slidesLength = Array.isArray(scene.value?.presentation?.slides)
@@ -165,6 +191,7 @@ watch(isImmersive, (nextValue) => {
 
 onBeforeUnmount(() => {
 	clearImmersiveUiTimer();
+	clearTimeout(pendingClearTimer);
 	mapStore.destroyMapBox();
 });
 </script>
@@ -259,6 +286,14 @@ onBeforeUnmount(() => {
 					class="canvas-body"
 					:class="{ 'canvas-body--immersive': isImmersive }"
 				>
+				<!-- Persistent map layer: always mounted, positioned behind canvas content.
+				     Visible in map mode OR when a map slide is active in presentation. -->
+				<div
+					class="canvas-persistent-map"
+					:class="{ 'canvas-persistent-map--visible': showPersistentMap }"
+				>
+					<MapContainer v-if="shouldMountMap" />
+				</div>
 				<div
 					v-show="selectedMode === 'presentation'"
 					class="canvas-inner canvas-inner--presentation"
@@ -270,6 +305,7 @@ onBeforeUnmount(() => {
               :components="componentCards"
               :city-manager="contentStore.cityManager"
 						:is-immersive="isImmersive"
+						@map-slide-active="isMapSlideActive = $event"
             />
             <div
               v-else
@@ -318,14 +354,13 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- map mode -->
+          <!-- map mode - handled by canvas-persistent-map above -->
 				<div
 					v-show="selectedMode === 'map'"
 					class="canvas-inner canvas-inner--map"
 					:class="{ 'canvas-inner--immersive': isImmersive }"
 				>
-					<MapContainer v-if="hasMapComponents" />
-					<div v-else class="canvas-empty">
+					<div v-if="!shouldMountMap" class="canvas-empty">
               <span class="icon canvas-empty-icon">map</span>
 						<p>目前推薦內容沒有可顯示的地圖圖層</p>
 						<p class="canvas-empty-sub">可先請 AI 推薦包含地圖圖層的組件</p>
@@ -390,10 +425,11 @@ onBeforeUnmount(() => {
           <button
             v-if="!scene.layout.leftPanel.collapsed"
             class="icon-btn"
-            title="清除聊天紀錄"
+            :class="{ 'icon-btn--pending': pendingClear }"
+            :title="pendingClear ? '再按一次確認清除' : '清除聊天紀錄'"
             @click="clearChatConfirm"
           >
-            <span class="icon">delete_sweep</span>
+            <span class="icon">{{ pendingClear ? 'warning' : 'delete_sweep' }}</span>
           </button>
           <button
             class="icon-btn"
@@ -505,6 +541,22 @@ $left-w: 360px;
 			color: #f87171;
 		}
 	}
+
+	&--pending {
+		color: #f59e0b;
+		background: rgba(245, 158, 11, 0.12);
+		animation: icon-btn-pulse 0.8s ease-in-out infinite alternate;
+
+		&:hover {
+			background: rgba(245, 158, 11, 0.22);
+			color: #f59e0b;
+		}
+	}
+}
+
+@keyframes icon-btn-pulse {
+	from { opacity: 0.75; }
+	to   { opacity: 1; }
 }
 
 /* ── Left panel ──────────────────────────────────────────────── */
@@ -728,9 +780,31 @@ $left-w: 360px;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+	position: relative;
+	z-index: 2;
+	isolation: isolate; /* stacking context so transparent map slides reveal the persistent map below */
+	background: #020617; /* dark fallback — shows through transparent chain when map is inactive */
 
 	&--immersive {
 		padding: 0;
+	}
+}
+
+/* Persistent map layer — sits behind canvas-body (z-index: 1) within aistudio-canvas.
+   Transparent map slides in the presentation carousel reveal this map through the glass panel.
+   The presentation-canvas and presentation-stage have dark backgrounds that constrain the
+   transparent hole to just the glass panel card area. */
+.canvas-persistent-map {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.45s ease;
+
+	&--visible {
+		opacity: 1;
+		pointer-events: auto;
 	}
 }
 
@@ -749,6 +823,13 @@ $left-w: 360px;
 
 	&--presentation {
 		overflow: hidden;
+		/* Must be positioned + z-index > canvas-persistent-map (z-index:1) so the
+		   presentation canvas renders ON TOP of the persistent map layer.
+		   The transparent glass-panel--map in the presentation will then reveal the
+		   map (z-index:1) through the transparent hole, while the dark
+		   presentation-canvas and presentation-stage backgrounds mask areas outside the card. */
+		position: relative;
+		z-index: 2;
 	}
 
 	&--web {

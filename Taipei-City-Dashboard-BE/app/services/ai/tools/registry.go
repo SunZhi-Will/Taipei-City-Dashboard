@@ -129,7 +129,7 @@ func RetrieveComponentsByQuery(ctx context.Context, args string) (string, error)
 	}
 
 	if params.Score <= 0 || params.Score > 1 {
-		params.Score = 0.78
+		params.Score = 0.82
 	}
 
 	// Try to get Vue components first

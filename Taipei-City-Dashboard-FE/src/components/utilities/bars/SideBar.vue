@@ -159,6 +159,7 @@ onMounted(() => {
         <transition name="collapse">
           <div v-if="!collapsedStates.private">
             <h2 @click="toggleCollapse('favorites')">
+              <span class="sidebar-icon material-icons-round">star_border</span>
               <span
                 class="sidebar-label"
                 :class="{ 'is-hidden': !isExpanded }"
@@ -179,42 +180,30 @@ onMounted(() => {
                 />
               </template>
             </transition>
-            <div class="sidebar-sub-add">
-              <h2 @click="toggleCollapse('personal')">
-                <span
-                  class="sidebar-label"
-                  :class="{ 'is-hidden': !isExpanded }"
-                >個人儀表板</span>
-                <span
-                  class="sidebar-chevron material-icons-round"
-                  aria-hidden="true"
-                >{{ collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
-              </h2>
-              <button
-                :class="{ 'is-inactive': !isExpanded || collapsedStates.personal }"
-                aria-label="新增個人儀表板"
-                @click="handleOpenAddDashboard"
-              >
-                <span>add_circle_outline</span>新增
-              </button>
-            </div>
+            <h2 @click="toggleCollapse('personal')">
+              <span class="sidebar-icon material-icons-round">person</span>
+              <span
+                class="sidebar-label"
+                :class="{ 'is-hidden': !isExpanded }"
+              >個人儀表板</span>
+              <span
+                class="sidebar-chevron material-icons-round"
+                aria-hidden="true"
+              >{{ collapsedStates.personal ? "arrow_drop_down" : "arrow_drop_up" }}</span>
+            </h2>
             <div
               v-if="
-                contentStore.personalDashboards.filter(
-                  (item) => item.icon !== 'favorite'
-                ).length === 0
+                !collapsedStates.personal &&
+                  contentStore.personalDashboards.filter(
+                    (item) => item.icon !== 'favorite'
+                  ).length === 0
               "
               class="sidebar-sub-no"
             >
               <p>{{ isExpanded ? `尚無個人儀表板 ` : `尚無` }}</p>
             </div>
             <transition name="collapse">
-              <div
-                v-if="
-                  !collapsedStates.personal &&
-                    contentStore.personalDashboards?.length > 0
-                "
-              >
+              <div v-if="!collapsedStates.personal">
                 <SideBarTab
                   v-for="item in contentStore.personalDashboards.filter(
                     (item) => item.icon !== 'favorite'
@@ -226,6 +215,14 @@ onMounted(() => {
                   :expanded="isExpanded"
                   :level="3"
                 />
+                <button
+                  v-if="isExpanded"
+                  class="sidebar-add-item"
+                  aria-label="新增個人儀表板"
+                  @click="handleOpenAddDashboard"
+                >
+                  <span>add_circle_outline</span>新增
+                </button>
               </div>
             </transition>
           </div>
@@ -429,51 +426,68 @@ overflow: hidden;
 border-radius: 999px;
 transition: background-color 0.2s ease, padding 0.32s cubic-bezier(0.4, 0, 0.2, 1), margin 0.24s ease;
 
-&:hover {
-background-color: var(--color-sidebar-item-hover-bg);
-}
-}
-
-&-sub {
-&-add {
-display: flex;
-align-items: center;
-
-h2 {
-flex: 1;
-min-width: 0;
-}
-
-button {
-display: flex;
-align-items: center;
-padding: 1px 4px;
-margin-right: 6px;
-border-radius: 999px;
-background-color: transparent;
-color: var(--color-normal-text);
-font-size: var(--font-s);
-flex-shrink: 0;
+.sidebar-icon {
+font-family: "Material Icons Round", var(--font-icon);
+font-style: normal;
+font-weight: 400;
+line-height: 1;
+letter-spacing: normal;
+text-transform: none;
 white-space: nowrap;
+direction: ltr;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+text-rendering: optimizeLegibility;
+font-feature-settings: "liga";
+font-size: 16px;
+margin-right: 6px;
+margin-left: 0;
+flex-shrink: 0;
+transition: margin-left 0.32s cubic-bezier(0.4, 0, 0.2, 1), margin-right 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 &:hover {
 background-color: var(--color-sidebar-item-hover-bg);
-color: var(--color-normal-text);
+}
 }
 
-&.is-inactive {
-visibility: hidden;
-pointer-events: none;
+&-add-item {
+display: flex;
+align-items: center;
+width: calc(100% - 16px);
+box-sizing: border-box;
+height: 2.25rem;
+margin: 2px 8px;
+padding: 0 10px 0 14px;
+border-radius: 999px;
+background: transparent;
+color: var(--color-normal-text);
+font-size: var(--font-m);
+font-weight: 400;
+cursor: pointer;
+white-space: nowrap;
+border: none;
+transition: background-color 0.2s ease, color 0.2s ease;
+text-decoration: none;
+
+&:hover {
+background-color: var(--color-sidebar-item-hover-bg);
 }
 
 span {
 font-family: var(--font-icon);
-font-size: 14px;
-margin-right: 2px;
-}
+font-size: 17px;
+margin-right: 8px;
+width: 17px;
+height: 17px;
+flex-shrink: 0;
+display: inline-flex;
+align-items: center;
+justify-content: center;
 }
 }
 
+&-sub {
 &-no p {
 padding: 0 8px 0 28px;
 height: 2.25rem;
@@ -538,13 +552,18 @@ margin-right: 0;
 
 h2 {
 justify-content: flex-start;
-padding: 0 12px 0 12px;
+padding: 0;
 margin-left: 0;
 margin-right: 0;
 border-radius: 12px;
 
 .sidebar-chevron {
 display: none;
+}
+
+.sidebar-icon {
+margin-left: calc((3.5rem - 16px) / 2);
+margin-right: 0;
 }
 }
 

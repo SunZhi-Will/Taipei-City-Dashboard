@@ -38,6 +38,8 @@ services:
       VITE_TAIPEIPASS_URL: ${TAIPEIPASS_URL}
       VITE_TAIPEIPASS_CLIENT_ID: ${ISSO_CLIENT_ID}
       VITE_TAIPEIPASS_SCOPE: ${ISSO_CLIENT_SCOPE}
+      VITE_USE_TWAI_CHAT: ${VITE_USE_TWAI_CHAT:-true}
+      VITE_PERSONAL_BOARD_UPDATE: ${VITE_PERSONAL_BOARD_UPDATE:-}
     volumes:
       - ../Taipei-City-Dashboard-FE:/opt/Taipei-City-Dashboard-FE
     ports:
@@ -95,6 +97,7 @@ services:
       TWCC_TIMEOUT: ${TWCC_TIMEOUT}
       TWCC_MAX_RETRY: ${TWCC_MAX_RETRY}
       TWCC_MAX_CONCURRENT: ${TWCC_MAX_CONCURRENT}
+      TWCC_MAX_TOOL_LOOPS: ${TWCC_MAX_TOOL_LOOPS:-5}
     volumes:
       - ../Taipei-City-Dashboard-BE:/opt/Taipei-City-Dashboard-BE
     working_dir: /opt/Taipei-City-Dashboard-BE

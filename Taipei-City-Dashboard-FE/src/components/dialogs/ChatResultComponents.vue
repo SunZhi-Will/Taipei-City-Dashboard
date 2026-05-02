@@ -84,6 +84,7 @@ const onOpenMap = (comp) => {
       <DashboardComponent
         v-else-if="isDashboardPreview(primaryComponent)"
         :config="primaryComponent.dashboardConfig"
+        :active-city="primaryComponent.dashboardConfig?.city || ''"
         mode="default"
         :show-index="false"
         :city-tag="cityTags(primaryComponent.dashboardConfig)"

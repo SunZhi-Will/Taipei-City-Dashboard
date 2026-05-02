@@ -39,9 +39,10 @@ const cities = [
 ]
 
 const cityName = computed(() => {
-	if (!props.activeCity) return "metrotaipei"
-
-	return cities.find(city => city.value === props.activeCity)?.name
+	// Return the display name; fall back to "雙北市" so v-if conditions in the
+	// template (which check Chinese display names) always find a matching SVG.
+	const found = cities.find(city => city.value === props.activeCity);
+	return found?.name ?? "雙北市";
 });
 
 const districts = [

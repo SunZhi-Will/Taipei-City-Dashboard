@@ -166,14 +166,19 @@ function reload3DMRTMapData() {
 }
 
 const navItems = [
-	{ name: "儀表板", icon: "dashboard", path: "/dashboard", id: "dashboard" },
-	{ name: "地圖", icon: "map", path: "/mapview", id: "mapview" },
-	{ name: "組件", icon: "widgets", path: "/component", id: "component", auth: true },
-	{ name: "AI", icon: "psychology", path: "/ai-studio", id: "ai-studio" }
+	{ name: "儀表板", icon: "dashboard", path: "/dashboard", id: "dashboard", type: "link" },
+	{ name: "地圖", icon: "map", path: "/mapview", id: "mapview", type: "link" },
+	{ name: "組件", icon: "widgets", path: "/component", id: "component", type: "link", authRequired: true },
+	{ name: "AI", icon: "psychology", path: "/ai-studio", id: "ai-studio", type: "link" },
+	{ name: "登入", icon: "login", id: "login", type: "action", action: () => dialogStore.showDialog('login'), guestOnly: true },
 ];
 
 const filteredNavItems = computed(() => {
-	return navItems.filter(item => !item.auth || authStore.token);
+	return navItems.filter(item => {
+		if (item.authRequired) return !!authStore.token;
+		if (item.guestOnly) return !authStore.token;
+		return true;
+	});
 });
 
 const isNavItemActive = (itemId) => {
@@ -295,16 +300,29 @@ onBeforeUnmount(() => {
 			v-if="authStore.isNarrowDevice && authStore.currentPath !== 'embed' && !isAIStudioImmersive"
       class="app-bottom-nav"
     >
-      <router-link
+      <template
         v-for="item in filteredNavItems"
         :key="item.id"
-        :to="item.path"
-        class="app-bottom-nav-item"
-        :class="{ 'is-active': isNavItemActive(item.id) }"
       >
-        <span class="app-bottom-nav-icon">{{ item.icon }}</span>
-        <span class="app-bottom-nav-label">{{ item.name }}</span>
-      </router-link>
+        <router-link
+          v-if="item.type === 'link'"
+          :to="item.path"
+          class="app-bottom-nav-item"
+          :class="{ 'is-active': isNavItemActive(item.id) }"
+        >
+          <span class="app-bottom-nav-icon">{{ item.icon }}</span>
+          <span class="app-bottom-nav-label">{{ item.name }}</span>
+        </router-link>
+        <button
+          v-else
+          class="app-bottom-nav-item app-bottom-nav-item--btn"
+          type="button"
+          @click="item.action()"
+        >
+          <span class="app-bottom-nav-icon">{{ item.icon }}</span>
+          <span class="app-bottom-nav-label">{{ item.name }}</span>
+        </button>
+      </template>
     </nav>
 
     <InitialWarning />
@@ -412,6 +430,13 @@ onBeforeUnmount(() => {
     &-label {
       font-size: var(--font-xs);
       font-weight: 500;
+    }
+
+    &-item--btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
     }
   }
 }

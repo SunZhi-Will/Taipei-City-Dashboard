@@ -34,7 +34,7 @@ func New(apiKey, baseURL, model string, timeout int) *TWCC {
 		ModelName:  model,
 		HTTPClient: &http.Client{Timeout: time.Duration(timeout) * time.Second},
 		Temperature: 0.7,
-		MaxTokens:   350,
+		MaxTokens:   1500,
 	}
 }
 

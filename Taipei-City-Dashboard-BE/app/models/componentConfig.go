@@ -381,6 +381,49 @@ func GetComponentByQueryVectorRich(queryString string, limit int, scoreThreshold
 	return rich, nil
 }
 
+// ComponentChartMeta holds chart capability metadata for a single component, used by AI planning.
+type ComponentChartMeta struct {
+	ChartTypes []string // Exact chart type strings, e.g. ["BarChart", "ColumnChart"]
+	HasMap     bool     // Whether the component has a non-empty map_config
+}
+
+// GetComponentChartMeta returns chart_types and has_map for a single component by ID.
+// It is used by normalizeDisplayPlan to validate and auto-correct AI-generated slide chart_type values.
+func GetComponentChartMeta(componentID int64) (*ComponentChartMeta, error) {
+	var row struct {
+		ChartTypes string `gorm:"column:chart_types"`
+		HasMap     bool   `gorm:"column:has_map"`
+	}
+	err := DBManager.Raw(`
+		SELECT cc.types::text AS chart_types,
+			   (qc.map_config_ids IS NOT NULL AND array_length(qc.map_config_ids,1) > 0) AS has_map
+		FROM components c
+		JOIN component_charts cc ON c.index = cc.index
+		JOIN query_charts qc ON c.index = qc.index
+		WHERE c.id = ?
+		LIMIT 1
+	`, componentID).Scan(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	if row.ChartTypes == "" {
+		return &ComponentChartMeta{}, nil
+	}
+
+	var types []string
+	clean := strings.Trim(row.ChartTypes, "{}")
+	if strings.HasPrefix(row.ChartTypes, "[") {
+		_ = json.Unmarshal([]byte(row.ChartTypes), &types)
+	} else if clean != "" {
+		for _, t := range strings.Split(clean, ",") {
+			trimmed := strings.Trim(strings.TrimSpace(t), `"`)
+			if trimmed != "" {
+				types = append(types, trimmed)
+			}
+		}
+	}
+	return &ComponentChartMeta{ChartTypes: types, HasMap: row.HasMap}, nil
+}
 
 func CreateComponent(index string, name string, city string, historyConfig json.RawMessage, mapFilter json.RawMessage, timeFrom string, timeTo *string, updateFreq *int64, updateFreqUnit string, source string, shortDesc string, longDesc string, useCase string, links pq.StringArray, contributors pq.StringArray) (cityComponent CityComponent, err error) {
     // component := Component{

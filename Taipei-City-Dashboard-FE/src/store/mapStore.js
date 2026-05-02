@@ -257,13 +257,28 @@ export const useMapStore = defineStore("map", {
 				.catch((e) => console.error(e));
 
 			// Taipei 3D Buildings
-			if (!authStore.isMobileDevice) {
-				this.map
-					.addSource("taipei_building_3d_source", {
-						type: "vector",
-						url: import.meta.env.VITE_MAPBOXTILE,
-					})
-					.addLayer(TaipeiBuilding);
+			if (!authStore.isMobileDevice && import.meta.env.VITE_MAPBOXTILE) {
+				try {
+					this.map
+						.addSource("taipei_building_3d_source", {
+							type: "vector",
+							url: import.meta.env.VITE_MAPBOXTILE,
+						})
+						.addLayer(TaipeiBuilding);
+					// Mapbox fires source-layer validation errors via the event system rather
+					// than throwing synchronously. Suppress them to avoid console noise when
+					// the tileset does not expose the expected source layer.
+					this.map.on("error", (e) => {
+						if (
+							e?.error?.message?.includes("taipei_building_3d") ||
+							e?.error?.message?.includes("taipei_building_3d_source")
+						) {
+							console.warn("taipei_building_3d: source layer not found, 3D buildings disabled.", e.error.message);
+						}
+					});
+				} catch (e) {
+					console.warn("taipei_building_3d: failed to add 3D building source/layer", e);
+				}
 			}
 			// Taipei Village Boundaries
 			if (hasSourceLayer) {

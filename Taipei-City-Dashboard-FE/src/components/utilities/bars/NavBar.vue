@@ -455,6 +455,8 @@ const isLocalhost = computed(() => {
           right: 20px;
           top: 55px;
           padding: 8px;
+          margin: 0;
+          list-style: none;
           border-radius: 5px;
           background-color: rgb(85, 85, 85);
           opacity: 0;
@@ -462,6 +464,7 @@ const isLocalhost = computed(() => {
           z-index: 10;
 
           li {
+            list-style: none;
             border-radius: 5px;
             transition: background-color 0.25s;
 

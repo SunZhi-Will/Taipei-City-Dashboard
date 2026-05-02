@@ -85,7 +85,7 @@ const contentStore = useContentStore();
 const authStore = useAuthStore();
 const router = useRouter();
 
-const { addChatData, addQueryData, saveChatLog, clearChatHistory } = chatStore;
+const { addChatData, addQueryData, saveChatLog } = chatStore;
 const { createDashboard } = contentStore;
 const { chatData, isResponding } = storeToRefs(chatStore);
 const { editDashboard } = storeToRefs(contentStore);
@@ -163,12 +163,6 @@ const sendBtnHandler = async () => {
 	if (!text) return;
 	userMessage.value = "";
 	await addQueryData({ role: "user", content: text });
-};
-
-const clearChat = () => {
-	if (confirm("確定要清除所有聊天紀錄並開新的 Chat 嗎？")) {
-		clearChatHistory();
-	}
 };
 
 const copyToClipboard = async (text) => {

@@ -106,18 +106,13 @@ export const selectFocusedComponents = (components, query) => {
 	const second = ranked[1];
 	const directIntent = isDirectComponentIntent(query);
 	const dominant = !second || (top.__matchScore - second.__matchScore >= 25);
-	const limit = directIntent ? 3 : 4;
-	const selected = ranked.slice(0, limit);
-	const normalized = selected.map((item, idx) => ({
+	// 主要組件遠勝其餘時，縮減 related 數量以避免顯示不相關組件
+	const limit = dominant ? 2 : (directIntent ? 3 : 4);
+
+	return ranked.slice(0, limit).map((item, idx) => ({
 		...item,
 		isPrimary: idx === 0,
 	}));
-
-	if (directIntent && dominant) {
-		return normalized;
-	}
-
-	return normalized;
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -280,6 +275,22 @@ export const summarizeRelatedComponents = (components = []) => {
 	return `若您要延伸比較，也可以一起看 ${names.slice(0, -1).join('、')} 與 ${names[names.length - 1]}。`;
 };
 
+// 從 AI Markdown 表格中擷取指定組件名的「數值」欄
+// 表格格式：排名 | 城市名 | 組件名 | 數值  → cells[0]、cells[1]、cells[2]、cells[3]
+const extractValueFromTable = (aiContent, componentName) => {
+	const allRows = (aiContent.match(/^\|[^\n]+\|$/gm) || []);
+	const dataRows = allRows
+		.filter(row => !/^\|[\s|:-]+\|$/.test(row)) // 排除 separator row
+		.slice(1); // 排除 header row
+	for (const row of dataRows) {
+		const cells = row.split('|').map(c => c.trim()).filter(Boolean);
+		if (cells.length >= 3 && cells[2] === componentName) {
+			return cells.length >= 4 ? cells[3] : null;
+		}
+	}
+	return null;
+};
+
 export const buildComponentNarrative = (question, components = [], aiContent = '') => {
 	const list = Array.isArray(components) ? components : [];
 	if (list.length === 0) {
@@ -292,15 +303,45 @@ export const buildComponentNarrative = (question, components = [], aiContent = '
 	const normalizedAiContent = String(aiContent || '').trim();
 	const genericAiReply = !normalizedAiContent || /主結果|相關候選|score|rag|tool|index|id|rephrase|rephrase your question|retrieve/i.test(normalizedAiContent);
 
-	const intro = `我先幫您整理成最值得直接查看的圖表：${primary?.name || '相關指標'}。`;
-	const summary = shortDesc ? `這個指標重點在於${shortDesc}。` : `這張圖表最能直接回應您剛剛提到的「${question}」。`;
-	const relatedHint = summarizeRelatedComponents(related);
+	// 偵測 AI 表格是否「過包含」：即 AI 表格內的資料列數 > 我們已過濾的 components 數量
+	// Pattern：對比 Markdown pipe 表格中的 data rows（排除 separator 列、排除 header 列）
+	const allPipeRows = (normalizedAiContent.match(/^\|[^\n]+\|$/gm) || []);
+	const contentPipeRows = allPipeRows.filter(row => !/^\|[\s|:-]+\|$/.test(row));
+	const aiTableDataCount = Math.max(0, contentPipeRows.length - 1); // 減去 header row
+	const tableIsOverInclusive = aiTableDataCount > 0 && aiTableDataCount > list.length;
 
-	if (genericAiReply) {
-		return [intro, summary, relatedHint].filter(Boolean).join(' ');
+	// 僅將有關鍵字相關性（__matchScore ≥ 20）的組件列為「延伸推薦」，排除純向量相似但語意無關的組件
+	const keywordRelated = related.filter((item) => (item?.__matchScore ?? 0) >= 20);
+	const relatedHint = summarizeRelatedComponents(keywordRelated);
+
+	const CLOSING = '若有其他問題，歡迎繼續詢問！';
+
+	if (genericAiReply || tableIsOverInclusive) {
+		// 若表格過包含，嘗試從 AI 表格擷取 primary 組件的實際數值（保留有用資訊）
+		const primaryValue = tableIsOverInclusive && primary?.name
+			? extractValueFromTable(normalizedAiContent, primary.name)
+			: null;
+		const valuePart = primaryValue ? `（最新數值：${primaryValue}\uff09` : '';
+		const intro = `您好！根據您關於「${question}」的查詢，為您找到最相關的指標：`;
+		const mainDesc = shortDesc
+			? `**${primary?.name || '相關指標'}**${valuePart}：${shortDesc}。`
+			: `**${primary?.name || '相關指標'}**${valuePart} 最能直接回應您的查詢。`;
+		return [intro, mainDesc, relatedHint, CLOSING].filter(Boolean).join('\n\n');
 	}
 
-	return [normalizedAiContent, relatedHint].filter(Boolean).join(' ');
+	// 若 AI 回覆未以親切語句開頭（如直接從表格開始），補上開場引語
+	const hasNaturalOpening = /^(您好|根據|以下|我已|很高興|這裡|依據|幫您)/.test(normalizedAiContent);
+	const prefix = hasNaturalOpening ? '' : `根據您的查詢，以下是相關資訊：\n\n`;
+
+	// 避免重複：若 AI 已提及「延伸比較」建議，不再附加
+	const alreadyHasHint = /若您要延伸比較|延伸比較/.test(normalizedAiContent);
+	const hint = alreadyHasHint ? '' : relatedHint;
+
+	// 若 AI 回覆無鼓勵性結語，自動附加
+	const hasClosing = /歡迎繼續|若有.*問題|希望.*幫助|有任何疑問|隨時.*詢問/.test(normalizedAiContent);
+	const closing = hasClosing ? '' : CLOSING;
+
+	return [prefix + normalizedAiContent, hint, closing].filter(Boolean).join(' ');
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -463,6 +504,11 @@ export const resolveSceneFromDisplayPlan = (question = '', displayPlan = null, c
 			subtitle: slide?.summary || '',
 			focusComponentId: slide?.focus_component_id || undefined,
 			chartType: slide?.chart_type || undefined,
+			mapQuery: slide?.map_query || '',
+			mapLng: Number.isFinite(Number(slide?.map_lng)) ? Number(slide.map_lng) : undefined,
+			mapLat: Number.isFinite(Number(slide?.map_lat)) ? Number(slide.map_lat) : undefined,
+			bullets: Array.isArray(slide?.bullets) ? slide.bullets : [],
+			highlight: slide?.highlight || '',
 			durationSec: Number(slide?.duration_sec) > 0 ? Number(slide.duration_sec) : 12,
 		}))
 		: [];
@@ -523,7 +569,15 @@ export const resolveSceneFromDisplayPlan = (question = '', displayPlan = null, c
 
 export const buildTwaiMessages = (latestUserInput, chatHistory = [], includeHistory = true) => {
 	const systemPrompt =
-		'你是臺北城市儀表板小幫手。回覆對象是一般使用者，不是工程師。若使用者在查某個指標、圖表、組件或想看資料，必須先呼叫 retrieve_components_by_query，再呼叫 get_component_chart_data 取得實際資料後才能回答。當問題涉及數值、比較、趨勢、最近變化時，答案一定要帶出具體數值與對應時間區間。組件推薦時若有 2 筆以上結果，請使用 Markdown 表格，欄位包括「排名｜城市名｜組件名｜數值」；「數值」欄位請根據工具回傳的數據填充。不要暴露 RAG、tool、score、index、id、主結果、候選、檢索排序等中繼資訊。';
+		'你是臺北城市儀表板小幫手。回覆對象是一般使用者，不是工程師。' +
+		'若使用者在查某個指標、圖表、組件或想看資料，必須先呼叫 retrieve_components_by_query，再呼叫 get_component_chart_data 取得實際資料後才能回答。' +
+		'當問題涉及數值、比較、趨勢、最近變化時，答案一定要帶出具體數值與對應時間區間。' +
+		'重要：若 retrieve_components_by_query 回傳結果為空（count 為 0 或 results 為空陣列），請直接告知使用者「目前找不到與您查詢相關的儀表板組件」，並建議換用不同關鍵詞重試，絕對不可捏造不存在的組件名稱或數值。' +
+		'若第一次搜尋無結果，可嘗試降低 score 至 0.75 再搜尋一次。' +
+		'主題相關性自我檢查：收到 retrieve_components_by_query 結果後，必須逐一判斷每個組件是否與使用者查詢主題直接相關。若某組件名稱或描述顯然屬於不同主題領域（例如：查詢「交通」卻出現「空氣品質測站」；查詢「年齡分布」卻出現「地圖測站」；查詢「人口」卻出現「水質監測」），必須將該組件從推薦清單中完全排除，不得列入表格、不得呼叫其 get_component_chart_data，也不得在回覆文字中提及。' +
+		'組件推薦時若達條件且有 2 筆以上相關結果，請使用 Markdown 表格，欄位包括「排名｜城市名｜組件名｜數值」；「數值」欄位請根據工具回傳的數據填充，若尚未取得數值請留空而非填寫估算值。' +
+		'不要暴露 RAG、tool、score、index、id、主結果、候選、檢索排序等中繼資訊。' +
+		'每次回覆必須以親切的開場白開始（例如「您好！」），並以一句鼓勵繼續詢問的結語作結（例如「若有其他問題，歡迎繼續詢問！」）；回覆中不要自行加入「若您要延伸比較」的建議，系統已自動附加。';
 
 	if (!includeHistory) {
 		return [
@@ -588,25 +642,62 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 
 	const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+	// For AI Studio follow-up queries: inject current scene state so the AI knows
+	// which slides already exist and can intelligently modify/extend the scene
+	// rather than starting from scratch every time.
+	const contextualQuestion = (() => {
+		if (options.appMode !== 'ai_studio' || !options.sceneContext) return question;
+		const slides = options.sceneContext?.presentation?.slides;
+		if (!Array.isArray(slides) || slides.length === 0) return question;
+		const compSlides = slides.filter(s => s.type === 'component' || s.type === 'map');
+		if (compSlides.length === 0) return question;
+		const summary = compSlides
+			.slice(0, 6)
+			.map(s => `"${s.title}"(component_id:${s.focusComponentId || '?'})`)
+			.join('、');
+		return `[現有展示場景：共${slides.length}張投影片，圖表類：${summary}]\n${question}`;
+	})();
+
 	const createPayload = (includeHistory = true) => ({
 		session: getTwaiSessionId(),
 		app_mode: options.appMode || '',
 		stream: false,
-		messages: buildTwaiMessages(question, chatHistory, includeHistory),
-		max_new_tokens: includeHistory ? 512 : 256,
-		temperature: 0.35,
+		messages: buildTwaiMessages(includeHistory ? contextualQuestion : question, chatHistory, includeHistory),
+		max_new_tokens: includeHistory ? 1500 : 700,
+		temperature: options.appMode === 'ai_studio' ? 0.5 : 0.35,
 		tools: [
 			{
 				type: 'function',
 				function: {
 					name: 'retrieve_components_by_query',
-					description: 'Retrieve relevant Taipei dashboard components by vector similarity search',
+					description:
+						'Search Taipei City Dashboard components by natural language query using vector similarity. ' +
+						'ALWAYS call this tool FIRST whenever the user asks about any city data, metrics, indicators, statistics, trends, comparisons, or wants to see a chart. ' +
+						'Returns a list of matching components. IMPORTANT FIELDS in each result: ' +
+						'(1) id — use as focus_component_id in display_plan slides; ' +
+						'(2) chart_types — the EXACT strings you MUST use in the chart_type field of display_plan (e.g. "BarChart", "ColumnChart", "DonutChart", "map_legend"); ' +
+						'(3) has_map — ONLY set slide type="map" when this is true; if false, always use type="component". ' +
+						'If this returns 0 results, inform the user no matching components were found and suggest rephrasing. ' +
+						'Use descriptive Chinese keywords for best results (e.g. "空氣品質", "交通流量", "老年人口").',
 					parameters: {
 						type: 'object',
 						properties: {
-							query: { type: 'string' },
-							limit: { type: 'integer', minimum: 1, maximum: 10 },
-							score: { type: 'number', minimum: 0, maximum: 1 },
+							query: {
+								type: 'string',
+								description: 'Natural language description of the data topic in Chinese or English, e.g. "空氣品質 AQI" or "交通壅塞 車流量"',
+							},
+							limit: {
+								type: 'integer',
+								minimum: 1,
+								maximum: 10,
+								description: 'Number of components to return (default 5, max 10)',
+							},
+							score: {
+								type: 'number',
+								minimum: 0,
+								maximum: 1,
+								description: 'Minimum similarity score threshold between 0.75 and 0.88 (default 0.82). Lower this to 0.75 if first search returns 0 results.',
+							},
 						},
 						required: ['query'],
 					},
@@ -616,14 +707,32 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 				type: 'function',
 				function: {
 					name: 'get_component_chart_data',
-					description: 'Get chart data for a dashboard component by component_id and city',
+					description:
+						'Fetch actual chart data (numbers, time-series, categories) for a specific dashboard component. ' +
+						'Must be called AFTER retrieve_components_by_query to obtain the component_id. ' +
+						'Required for answering questions that need precise numbers, recent trends, or comparisons. ' +
+						'Returns a summary field with the latest value for quick table filling. ' +
+						'Defaults to last 30 days if no time range is specified.',
 					parameters: {
 						type: 'object',
 						properties: {
-							component_id: { type: 'integer' },
-							city: { type: 'string', enum: ['taipei', 'metrotaipei'] },
-							time_from: { type: 'string', description: 'ISO-8601 time format, e.g. 2026-04-01T00:00:00+08:00' },
-							time_to: { type: 'string', description: 'ISO-8601 time format, e.g. 2026-04-24T23:59:59+08:00' },
+							component_id: {
+								type: 'integer',
+								description: 'Component ID obtained from retrieve_components_by_query results',
+							},
+							city: {
+								type: 'string',
+								enum: ['taipei', 'metrotaipei'],
+								description: '"taipei" for Taipei City data, "metrotaipei" for greater Taipei area data. Match the city field from retrieve results.',
+							},
+							time_from: {
+								type: 'string',
+								description: 'Start of time range in ISO-8601 format e.g. 2026-03-01T00:00:00+08:00. Omit to default to 30 days ago.',
+							},
+							time_to: {
+								type: 'string',
+								description: 'End of time range in ISO-8601 format e.g. 2026-04-30T23:59:59+08:00. Omit to default to current time.',
+							},
 						},
 						required: ['component_id'],
 					},
@@ -633,7 +742,9 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 				type: 'function',
 				function: {
 					name: 'get_current_time',
-					description: 'Get current Taipei time',
+					description:
+						'Get the current date and time in Taipei (Asia/Taipei timezone, UTC+8). ' +
+						'Call this when the user asks about current time, or when you need to compute relative date ranges for data queries.',
 					parameters: {
 						type: 'object',
 						properties: {},
@@ -644,12 +755,21 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 				type: 'function',
 				function: {
 					name: 'get_population_summary',
-					description: 'Get city population summary for specified year',
+					description:
+						'Get annual population age distribution statistics (young/working-age/elderly) for Taipei or New Taipei City. ' +
+						'Use for demographic questions about population structure, aging index, dependency ratio, or elderly care needs.',
 					parameters: {
 						type: 'object',
 						properties: {
-							city: { type: 'string', enum: ['taipei', 'new_taipei'] },
-							year: { type: 'integer' },
+							city: {
+								type: 'string',
+								enum: ['taipei', 'new_taipei'],
+								description: '"taipei" for Taipei City, "new_taipei" for New Taipei City',
+							},
+							year: {
+								type: 'integer',
+								description: 'Year of population data (e.g. 2024, 2025)',
+							},
 						},
 						required: ['year'],
 					},
@@ -803,13 +923,10 @@ export const queryByVector = async (question) => {
 export const saveChatLog = async (question, answer, meta = {}) => {
 	try {
 		const formData = new FormData();
-		const d = new Date();
-		const todayId =
-			d.getFullYear() +
-			String(d.getMonth() + 1).padStart(2, "0") +
-			String(d.getDate()).padStart(2, "0");
+		// 重用 TWAI session ID，確保同一瀏覽器 session 的日誌可追溯
+		const sessionId = getTwaiSessionId();
 
-		formData.append("session", "session_" + todayId);
+		formData.append("session", sessionId);
 		formData.append("question", question);
 		formData.append("answer", JSON.stringify(answer));
 		formData.append("answer_mode", meta.answerMode || "unknown");

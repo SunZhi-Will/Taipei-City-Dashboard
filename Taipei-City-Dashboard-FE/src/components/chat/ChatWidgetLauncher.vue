@@ -195,7 +195,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
 	.chat-launcher-root {
-		bottom: max(16px, env(safe-area-inset-bottom));
+		bottom: calc(70px + max(16px, env(safe-area-inset-bottom)));
 		right: max(16px, env(safe-area-inset-right));
 	}
 
@@ -207,9 +207,9 @@ onBeforeUnmount(() => {
 		position: fixed;
 		left: 8px;
 		right: 8px;
-		bottom: 8px;
-		height: calc(100vh - 16px);
-		max-height: calc(100vh - 16px);
+		bottom: calc(70px + 8px);
+		height: calc(100vh - 70px - 16px);
+		max-height: calc(100vh - 70px - 16px);
 		width: auto;
 		margin-bottom: 0;
 		animation: none;
@@ -218,9 +218,9 @@ onBeforeUnmount(() => {
 	.chatbox.expanded {
 		left: 8px;
 		right: 8px;
-		bottom: 8px;
-		height: calc(100vh - 16px);
-		max-height: calc(100vh - 16px);
+		bottom: calc(70px + 8px);
+		height: calc(100vh - 70px - 16px);
+		max-height: calc(100vh - 70px - 16px);
 	}
 
 	.chatbot-btn {

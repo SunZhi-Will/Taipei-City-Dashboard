@@ -5,7 +5,7 @@ import {
 	queryByVector,
 	componentsFromAgentResult,
 	ensureDashboardConfigs,
-	selectFocusedComponents,
+	hydrateDashboardComponents,
 	fetchDashboardComponentsByVector,
 	buildComponentNarrative,
 	resolveSceneFromAI,
@@ -13,11 +13,14 @@ import {
 	saveChatLog as aiChatServiceSaveChatLog,
 	isDirectComponentIntent,
 	buildTwaiFallbackNotice,
+	selectFocusedComponents,
 } from '../services/aiChatService';
+import { useAIStudioStore } from './aiStudioStore';
 
 const USE_TWAI_CHAT = (import.meta.env.VITE_USE_TWAI_CHAT ?? 'true') !== 'false';
 
 export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
+	const aiStudioStore = useAIStudioStore();
 	const defaultChatData = [
 		{
 			id: 1,
@@ -91,11 +94,35 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 
 		try {
 			if (USE_TWAI_CHAT) {
-				const twaiResult = await queryByTwai(newChatData.content, chatData.value, { appMode: 'ai_studio' });
+				const twaiResult = await queryByTwai(newChatData.content, chatData.value, {
+					appMode: 'ai_studio',
+					// Pass current scene so the AI knows what's already on screen
+					// and can intelligently modify/extend it on follow-up queries.
+					sceneContext: aiStudioStore.scene,
+				});
 				if (twaiResult?.ok) {
 					let components = componentsFromAgentResult(twaiResult.agentResult);
 					if (components.length > 0) {
 						components = await ensureDashboardConfigs(components);
+					}
+
+					// Supplement with ALL components from the vector search tool result.
+					// agentResult caps at primary + 3 related; display_plan may reference more.
+					const vectorEntry = Array.isArray(twaiResult.toolTimeline)
+						? [...twaiResult.toolTimeline].reverse().find(t => t.name === 'retrieve_components_by_query')
+						: null;
+					if (vectorEntry?.result) {
+						try {
+							const parsed = JSON.parse(vectorEntry.result);
+							if (Array.isArray(parsed?.results) && parsed.results.length > 0) {
+								const existingIds = new Set(components.map(c => String(c.id)));
+								const missing = parsed.results.filter(r => r.id && !existingIds.has(String(r.id)));
+								if (missing.length > 0) {
+									const extra = await hydrateDashboardComponents(missing);
+									components = [...components, ...extra.filter(c => c.id)];
+								}
+							}
+						} catch { /* silent */ }
 					}
 
 					const shouldRetrieveComponents =
@@ -106,11 +133,14 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 						components = await fetchDashboardComponentsByVector(newChatData.content, 5, 0.78);
 					}
 
-					if (components.length > 0) {
-						components = selectFocusedComponents(components, newChatData.content);
-					}
+					// Preserve full component list for display_plan rendering — no score-based filtering.
+					// Mark first as primary for ChatResultComponents display.
+					components = components.map((item, idx) => ({ ...item, isPrimary: idx === 0 }));
 
-					const finalContent = buildComponentNarrative(newChatData.content, components, twaiResult.content);
+					// Use AI's director narrative directly.
+					// buildComponentNarrative is for the general chat widget; AI Studio AI
+					// already produces a proper structured narrative.
+					const finalContent = twaiResult.content || '';
 					const plannedScene = resolveSceneFromDisplayPlan(
 						newChatData.content,
 						twaiResult.displayPlan,
@@ -133,7 +163,7 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 							resolveSceneFromAI(
 								newChatData.content,
 								twaiResult.content,
-								components,
+								selectFocusedComponents(components, newChatData.content),
 								components.length > 0 ? 'presentation' : 'web',
 							),
 						components: components.length > 0 ? components : undefined,

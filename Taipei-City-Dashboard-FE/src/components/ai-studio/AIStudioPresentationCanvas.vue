@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DashboardComponent from "../../dashboardComponent/DashboardComponent.vue";
 import { useMapStore } from "../../store/mapStore";
+import http from "../../router/axios";
 
 const props = defineProps({
 	scene: {
@@ -22,6 +23,8 @@ const props = defineProps({
 	},
 });
 
+const emit = defineEmits(['map-slide-active']);
+
 const mapStore = useMapStore();
 
 const activeIndex = ref(0);
@@ -39,6 +42,14 @@ const autoplayMs = computed(() => {
 	const duration = Number(props.scene?.presentation?.autoplay?.intervalMs || 10000);
 	return Number.isFinite(duration) && duration >= 2000 ? duration : 10000;
 });
+
+// Per-slide duration: respect each slide's durationSec, fall back to scene-level interval
+const currentSlideDurationMs = computed(() => {
+	const slide = slides.value[activeIndex.value];
+	const sec = Number(slide?.durationSec);
+	return Number.isFinite(sec) && sec >= 2 ? sec * 1000 : autoplayMs.value;
+});
+
 const strictRender = computed(() => Boolean(props.scene?.presentation?.strictRender));
 
 const themeClass = computed(() => `industry-${resolvedIndustry.value}`);
@@ -153,26 +164,168 @@ const getSlideComponent = (slide, slideIndex = 0) => {
 	return list[fallbackIndex] || list[0] || null;
 };
 
-const isUnknownSlideType = (slide) => !["hero", "component_explain", "component", "map"].includes(slide?.type);
+const isUnknownSlideType = (slide) => !["hero", "component_explain", "component", "map", "text"].includes(slide?.type);
+
+// Map chart types — used to auto-resolve initial-chart-type for map slides
+const MAP_CHART_TYPES = new Set(['map_legend', 'map_pin', 'map_heat', 'map_layer', 'map_district']);
+
+// Normalizes CamelCase chart type names to snake_case for comparison.
+// e.g. "MapLegend" → "map_legend", "map_legend" → "map_legend"
+const toSnakeCase = (t) => t.replace(/([A-Z])/g, (m, c) => '_' + c.toLowerCase()).replace(/^_/, '').toLowerCase();
+const isMapChartType = (t) => t && (MAP_CHART_TYPES.has(t) || MAP_CHART_TYPES.has(toSnakeCase(t)));
+
+/**
+ * Returns the best chart type for a slide:
+ * - map slides: checks if the component actually supports map chart types.
+ *   Returns the exact DB string (e.g. "MapLegend") for DashboardComponent compatibility.
+ *   If component has no map support → degrade to its primary chart type.
+ * - other slides: returns slide.chartType as-is.
+ */
+const resolveChartTypeForSlide = (slide, component) => {
+	if (slide?.type !== 'map') return slide?.chartType || '';
+
+	const types = component?.dashboardConfig?.chart_config?.types;
+	// Find first map type from the component's DB types (case-insensitive via isMapChartType)
+	const mapType = Array.isArray(types) ? types.find((t) => isMapChartType(t)) : null;
+
+	// Component has no map support — degrade gracefully to its primary chart type
+	if (!mapType) {
+		// If AI already specified a non-map chart_type for this slide, honour it
+		if (slide?.chartType && !isMapChartType(slide.chartType)) return slide.chartType;
+		return Array.isArray(types) && types.length > 0 ? types[0] : '';
+	}
+
+	// Component has map support — always return the exact DB map type string
+	// (avoids case mismatches: AI uses "map_legend" but DashboardComponent needs "MapLegend")
+	return mapType;
+};
+
+// ── Map Location Resolution ─────────────────────────────────────────
+// Cache resolved coordinates per slide.id to avoid re-fetching on every slide change
+const resolvedLocationCache = new Map();
+
+/**
+ * Move the map to [lng, lat] with a smooth flyTo animation and place the marker.
+ */
+const moveMapToLocation = (lng, lat) => {
+	if (!mapStore.map) return;
+	mapStore.map.flyTo({
+		center: [lng, lat],
+		zoom: Math.max(mapStore.map.getZoom?.() ?? 12, 14),
+		duration: 1400,
+		essential: true,
+	});
+	if (mapStore.marker) {
+		mapStore.marker.setLngLat([lng, lat]).addTo(mapStore.map);
+	}
+};
+
+/**
+ * Resolve a location query string via AI geocode endpoint (same as MapContainer).
+ * Returns { name, coordinates: [lng, lat] } or null on failure.
+ */
+const resolveLocationByAI = async (query) => {
+	try {
+		const response = await http.post('/ai/chat/twai', {
+			session: `canvas-map-${Date.now()}`,
+			app_mode: 'map_search',
+			stream: false,
+			max_new_tokens: 120,
+			temperature: 0.1,
+			tool_choice: 'none',
+			tools: [],
+			messages: [
+				{
+					role: 'system',
+					content: '你是地圖定位助手。請解析使用者地點並只回傳 JSON：{"location_name":"地點名","longitude":121.5,"latitude":25.0}。不可回傳任何其他文字。',
+				},
+				{
+					role: 'user',
+					content: `請解析以下地點並輸出座標：${query}`,
+				},
+			],
+		});
+		const raw = String(response?.data?.data?.content || '').trim();
+		const jsonMatch = raw.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) return null;
+		const parsed = JSON.parse(jsonMatch[0]);
+		const lng = Number(parsed?.longitude ?? parsed?.lng);
+		const lat = Number(parsed?.latitude ?? parsed?.lat);
+		if (Number.isFinite(lng) && Number.isFinite(lat)) {
+			return { name: parsed?.location_name || parsed?.name || query, coordinates: [lng, lat] };
+		}
+	} catch (_) { /* silent */ }
+	return null;
+};
+
+/**
+ * For a map slide, resolve its location (mapLng/mapLat or mapQuery) and flyTo.
+ * Results are cached per slide.id so repeated slide visits skip the API call.
+ */
+const resolveLocationAndFly = async (slide) => {
+	if (slide?.type !== 'map') return;
+
+	const cacheKey = slide.id || JSON.stringify(slide);
+
+	// Direct coordinates — highest priority
+	const lng = Number(slide?.mapLng);
+	const lat = Number(slide?.mapLat);
+	if (Number.isFinite(lng) && Number.isFinite(lat)) {
+		moveMapToLocation(lng, lat);
+		return;
+	}
+
+	const query = String(slide?.mapQuery || '').trim();
+	if (!query) return;
+
+	// Serve from cache
+	if (resolvedLocationCache.has(cacheKey)) {
+		const cached = resolvedLocationCache.get(cacheKey);
+		if (cached) moveMapToLocation(cached[0], cached[1]);
+		return;
+	}
+
+	const result = await resolveLocationByAI(query);
+	if (result?.coordinates) {
+		resolvedLocationCache.set(cacheKey, result.coordinates);
+		moveMapToLocation(result.coordinates[0], result.coordinates[1]);
+	} else {
+		resolvedLocationCache.set(cacheKey, null); // mark as unresolvable to avoid repeated calls
+	}
+};
 
 const syncMapLayersForSlide = (slide) => {
 	if (slide?.type !== "map") return;
 	const targetComponent = getSlideComponent(slide, activeIndex.value);
 	const mapConfig = targetComponent?.dashboardConfig?.map_config;
-	if (!Array.isArray(mapConfig) || mapConfig.length === 0 || !mapConfig[0]) return;
 
-	const activeCity = targetComponent?.city || targetComponent?.dashboardConfig?.city || "taipei";
 	const setupMapLayers = () => {
+		if (!mapStore.map?.loaded?.()) return;
+		const activeCity = targetComponent?.city || targetComponent?.dashboardConfig?.city || "taipei";
 		mapStore.updateMapViewForCity(activeCity);
-		mapStore.addToMapLayerList(mapConfig);
+		if (Array.isArray(mapConfig) && mapConfig.length > 0 && mapConfig[0]) {
+			mapStore.addToMapLayerList(mapConfig);
+		}
 	};
 
+	// Add data layers — guard against null map (race condition: map not yet initialized)
 	if (mapStore.map?.loaded?.()) {
 		setupMapLayers();
-		return;
+	} else if (mapStore.map) {
+		// Map exists but loading
+		mapStore.map.once("load", setupMapLayers);
 	}
+	// If mapStore.map is null, the watch(() => mapStore.map) watcher below will retry
 
-	mapStore.map?.once?.("load", setupMapLayers);
+	// Fly to location if slide has mapQuery or direct coordinates
+	if (slide.mapQuery || (slide.mapLng && slide.mapLat)) {
+		const doFly = () => resolveLocationAndFly(slide);
+		if (mapStore.map?.loaded?.()) {
+			doFly();
+		} else if (mapStore.map) {
+			mapStore.map.once("load", doFly);
+		}
+	}
 };
 
 const trackStyle = computed(() => ({
@@ -181,7 +334,7 @@ const trackStyle = computed(() => ({
 
 const clearTimer = () => {
 	if (timer) {
-		clearInterval(timer);
+		clearTimeout(timer);
 		timer = null;
 	}
 };
@@ -237,7 +390,7 @@ const resetProgress = () => {
 	if (!enabled || !isPlaying.value || slides.value.length <= 1) return;
 	requestAnimationFrame(() => {
 		requestAnimationFrame(() => {
-			progressDuration.value = autoplayMs.value;
+			progressDuration.value = currentSlideDurationMs.value;
 			progressWidth.value = 100;
 		});
 	});
@@ -247,9 +400,11 @@ const setupTimer = () => {
 	clearTimer();
 	const enabled = Boolean(props.scene?.presentation?.autoplay?.enabled);
 	if (!enabled || !isPlaying.value || slides.value.length <= 1) return;
-	timer = setInterval(() => {
+	// Use per-slide durationSec so each slide controls its own screen time
+	timer = setTimeout(() => {
 		nextSlide();
-	}, autoplayMs.value);
+		setupTimer();
+	}, currentSlideDurationMs.value);
 };
 
 watch([slides, autoplayMs, isPlaying, () => props.scene?.presentation?.autoplay?.enabled], () => {
@@ -263,7 +418,17 @@ watch([slides, autoplayMs, isPlaying, () => props.scene?.presentation?.autoplay?
 watch(activeIndex, (newVal) => {
 	resetProgress();
 	syncMapLayersForSlide(slides.value[newVal]);
+	emit('map-slide-active', slides.value[newVal]?.type === 'map');
 }, { immediate: true });
+
+// Fix race condition: when mapStore.map becomes ready, re-run sync for the current map slide
+watch(() => mapStore.map, (newMap) => {
+	if (!newMap) return;
+	const currentSlide = slides.value[activeIndex.value];
+	if (currentSlide?.type === 'map') {
+		syncMapLayersForSlide(currentSlide);
+	}
+});
 
 watch(() => props.isImmersive, (nextValue) => {
 	if (nextValue) {
@@ -275,13 +440,28 @@ watch(() => props.isImmersive, (nextValue) => {
 	clearControlsTimer();
 }, { immediate: true });
 
+const handleKeydown = (e) => {
+	if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+		e.preventDefault();
+		nextSlide({ resetAutoplay: true });
+	} else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+		e.preventDefault();
+		prevSlide({ resetAutoplay: true });
+	} else if (e.key === ' ') {
+		e.preventDefault();
+		isPlaying.value = !isPlaying.value;
+	}
+};
+
 onMounted(() => {
 	setupTimer();
+	window.addEventListener('keydown', handleKeydown);
 });
 
 onBeforeUnmount(() => {
 	clearTimer();
 	clearControlsTimer();
+	window.removeEventListener('keydown', handleKeydown);
 });
 </script>
 
@@ -303,10 +483,46 @@ onBeforeUnmount(() => {
           :class="{ 
             'is-active': index === activeIndex,
             'is-prev': index < activeIndex,
-            'is-next': index > activeIndex 
+            'is-next': index > activeIndex,
+            'presentation-slide--map': slide.type === 'map'
           }"
         >
           <div class="slide-inner-stage">
+
+						<!-- ── MAP SLIDE: transparent glass panel so Mapbox shows through; info footer at bottom ── -->
+						<template v-if="slide.type === 'map'">
+							<div class="slide-glass-panel slide-glass-panel--map">
+								<!-- Transparent middle = map shows through via presentation-stage background hole -->
+								<div class="slide-map-body">
+									<!-- header with pagination -->
+									<div class="slide-map-header">
+										<div class="slide-map-pagination-inline">
+											<span class="current">{{ String(index + 1).padStart(2, '0') }}</span>
+											<span class="separator">/</span>
+											<span class="total">{{ String(slides.length).padStart(2, '0') }}</span>
+										</div>
+										<h3 class="slide-map-title">
+											{{ slide.title || getSlideComponent(slide, index)?.name || '空間分析' }}
+										</h3>
+									</div>
+									<!-- Transparent fill area — map visible here -->
+									<div class="slide-map-viewport" />
+									<!-- footer overlay -->
+									<div class="slide-map-footer">
+										<p v-if="slide.summary || slide.subtitle" class="slide-map-desc">
+											{{ slide.summary || slide.subtitle }}
+										</p>
+										<div v-if="slide.mapQuery" class="slide-map-location-badge">
+											<span class="material-icons-round">location_on</span>
+											{{ slide.mapQuery }}
+										</div>
+									</div>
+								</div>
+							</div>
+						</template>
+
+						<!-- ── NON-MAP SLIDES: glass panel with existing layout ── -->
+						<template v-else>
 						<div
 							class="slide-glass-panel"
 							:class="{ 'slide-glass-panel--component': slide.type === 'component' }"
@@ -317,8 +533,9 @@ onBeforeUnmount(() => {
 							<div
 								class="slide-content"
 								:class="{
-								'slide-content--component': slide.type === 'component' || slide.type === 'map',
+								'slide-content--component': slide.type === 'component',
 									'slide-content--hero': slide.type === 'hero' || slide.type === 'component_explain' || isUnknownSlideType(slide),
+									'slide-content--text': slide.type === 'text',
 								}"
 							>
                 <div class="slide-header">
@@ -332,8 +549,9 @@ onBeforeUnmount(() => {
 								<div
 									class="slide-main"
 									:class="{
-									'slide-main--component': slide.type === 'component' || slide.type === 'map',
+									'slide-main--component': slide.type === 'component',
 										'slide-main--hero': slide.type === 'hero' || slide.type === 'component_explain' || isUnknownSlideType(slide),
+										'slide-main--text': slide.type === 'text',
 									}"
 								>
 									<div
@@ -364,14 +582,44 @@ onBeforeUnmount(() => {
 									>
 										{{ slide.subtitle }}
 									</p>
-									<p class="slide-subtitle">
+									<p v-if="!slide.subtitle" class="slide-subtitle">
 										{{ getSlideComponent(slide, index)?.dashboardConfig?.short_desc || '可切換到圖表牆查看完整組件內容與互動細節。' }}
 									</p>
 								</div>
 
-<!-- component / map 投影片：統一渲染 DashboardComponent -->
+								<!-- text 文字分析投影片 -->
+								<div
+									v-if="slide.type === 'text'"
+									class="slide-info slide-info--text"
+								>
+									<h2 class="slide-title">
+										{{ slide.title || '數據分析' }}
+									</h2>
+									<p
+										v-if="slide.subtitle"
+										class="slide-subtitle"
+									>
+										{{ slide.subtitle }}
+									</p>
+									<div v-if="slide.highlight" class="slide-highlight">
+										<span class="highlight-value">{{ slide.highlight }}</span>
+									</div>
+									<ul v-if="slide.bullets?.length" class="slide-bullets">
+										<li
+											v-for="(bullet, bIdx) in slide.bullets"
+											:key="bIdx"
+										>
+											{{ bullet }}
+										</li>
+									</ul>
+									<p v-else-if="slide.summary && !slide.subtitle" class="slide-text-body">
+										{{ slide.summary }}
+									</p>
+								</div>
+
+								<!-- component 投影片：渲染 DashboardComponent -->
                   <div
-								v-if="(slide.type === 'component' || slide.type === 'map') && getSlideComponent(slide, index)?.dashboardConfig"
+								v-if="slide.type === 'component' && getSlideComponent(slide, index)?.dashboardConfig"
                     class="slide-chart-container"
                   >
 								<div class="slide-component-meta">
@@ -391,14 +639,14 @@ onBeforeUnmount(() => {
 										:active-city="getSlideComponent(slide, index).city || getSlideComponent(slide, index).dashboardConfig.city"
 										:city-tag="cityManager?.getTagList(getSlideComponent(slide, index).city || getSlideComponent(slide, index).dashboardConfig.city)"
 										:presentation-mode="true"
-										:initial-chart-type="slide.chartType || ''"
+										:initial-chart-type="resolveChartTypeForSlide(slide, getSlideComponent(slide, index))"
                         :style="{ height: '100%', width: '100%' }"
                       />
                     </div>
                   </div>
 
 								<div
-									v-if="(slide.type === 'component' || slide.type === 'map') && !getSlideComponent(slide, index)?.dashboardConfig"
+									v-if="slide.type === 'component' && !getSlideComponent(slide, index)?.dashboardConfig"
 									class="slide-component-empty"
 								>
 									<h3>{{ slide.title || '圖表準備中' }}</h3>
@@ -419,6 +667,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
+						</template><!-- end non-map -->
           </div>
         </section>
       </div>
@@ -444,6 +693,7 @@ onBeforeUnmount(() => {
           :key="`dot-${slide.id || index}`"
           class="nav-dot"
           :class="{ active: index === activeIndex }"
+          :title="slide.title || `投影片 ${index + 1}`"
 					@click="jumpTo(index, { resetAutoplay: true })"
         />
       </div>
@@ -459,6 +709,13 @@ onBeforeUnmount(() => {
 
     <!-- Play/Pause & Progress -->
     <div class="status-footer">
+      <button
+        class="play-pause-btn"
+        :title="isPlaying ? '暫停自動播放 (Space)' : '開始自動播放 (Space)'"
+        @click="isPlaying = !isPlaying"
+      >
+        <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
+      </button>
       <div class="progress-container">
         <div
 			:key="progressRunKey"
@@ -494,28 +751,65 @@ $text-dim: #94a3b8;
 }
 
 /* ── Industry Themes ─────────────────────────────────────────── */
+// Industry themes must include the base dark color as last value —
+// otherwise `background` shorthand overrides `.presentation-canvas`'s #020617.
 .presentation-canvas.industry-transport {
 	background:
 		radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.18) 0%, transparent 45%),
-		radial-gradient(circle at 20% 80%, rgba(20, 184, 166, 0.15) 0%, transparent 45%);
+		radial-gradient(circle at 20% 80%, rgba(20, 184, 166, 0.15) 0%, transparent 45%),
+		#020617;
 }
 
 .presentation-canvas.industry-senior-care {
 	background:
 		radial-gradient(circle at 20% 20%, rgba(245, 158, 11, 0.15) 0%, transparent 45%),
-		radial-gradient(circle at 80% 80%, rgba(217, 119, 6, 0.12) 0%, transparent 45%);
+		radial-gradient(circle at 80% 80%, rgba(217, 119, 6, 0.12) 0%, transparent 45%),
+		#020617;
 }
 
 .presentation-canvas.industry-education {
 	background:
 		radial-gradient(circle at 75% 15%, rgba(96, 165, 250, 0.2) 0%, transparent 45%),
-		radial-gradient(circle at 25% 85%, rgba(59, 130, 246, 0.15) 0%, transparent 45%);
+		radial-gradient(circle at 25% 85%, rgba(59, 130, 246, 0.15) 0%, transparent 45%),
+		#020617;
 }
 
 .presentation-canvas.industry-health {
 	background:
 		radial-gradient(circle at 15% 15%, rgba(248, 113, 113, 0.15) 0%, transparent 45%),
-		radial-gradient(circle at 85% 85%, rgba(239, 68, 68, 0.12) 0%, transparent 45%);
+		radial-gradient(circle at 85% 85%, rgba(239, 68, 68, 0.12) 0%, transparent 45%),
+		#020617;
+}
+
+/* ── Map slide: transparent chain so Mapbox shows through glass panel ─── */
+/* When a map slide is the active slide, the canvas and stage must be fully
+   transparent so the isolated z-index:1 map layer shows through the
+   transparent .slide-glass-panel--map.
+   CSS :has() supported in Chrome 105+, Safari 15.4+, Firefox 121+. */
+.presentation-canvas:has(.presentation-slide--map.is-active),
+.presentation-canvas.industry-transport:has(.presentation-slide--map.is-active),
+.presentation-canvas.industry-senior-care:has(.presentation-slide--map.is-active),
+.presentation-canvas.industry-education:has(.presentation-slide--map.is-active),
+.presentation-canvas.industry-health:has(.presentation-slide--map.is-active) {
+	background: transparent;
+}
+
+/* When a map slide is active, disable 3D compositing context so the z-index
+   transparency chain works correctly after repaint (e.g. browser/map zoom).
+   transform-style: preserve-3d + perspective promote elements to GPU composite
+   layers whose transparent areas composite against an implicit opaque background
+   rather than the underlying Mapbox WebGL layer, causing the map to disappear. */
+.presentation-canvas:has(.presentation-slide--map.is-active) {
+	perspective: none;
+
+	.presentation-track {
+		transform-style: flat;
+	}
+
+	.presentation-slide--map.is-active {
+		transform: none;
+		transition: opacity 0.8s ease;
+	}
 }
 
 /* ── Stage & Track ───────────────────────────────────────────── */
@@ -525,6 +819,11 @@ $text-dim: #94a3b8;
 	min-height: 0;
 	z-index: 10;
 	overflow: hidden;
+	/* When map slide is active, :has() on the canvas removes its bg too;
+	   stage must also be transparent so the full chain passes through to z-index:1 map. */
+	.presentation-canvas:has(.presentation-slide--map.is-active) & {
+		background: transparent;
+	}
 }
 
 .presentation-track {
@@ -586,6 +885,22 @@ $text-dim: #94a3b8;
 
 	&--component {
 		max-width: none;
+	}
+
+	/* Map slide: transparent glass so the persistent Mapbox layer shows through.
+	   The massive box-shadow (clipped by presentation-stage overflow:hidden) provides
+	   the dark frame around the card in the slide padding area.
+	   pointer-events: none allows the underlying map to receive mouse/touch events. */
+	&--map {
+		background: transparent;
+		backdrop-filter: none;
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		/* box-shadow: inner ring + massive outer spread for dark frame outside card */
+		box-shadow:
+			0 0 0 1px rgba(56, 189, 248, 0.15),  /* subtle blue ring */
+			0 0 0 9999px #020617;                  /* dark mask outside card, clipped by stage overflow:hidden */
+		pointer-events: none;
+		overflow: hidden;
 	}
 }
 
@@ -662,16 +977,182 @@ $text-dim: #94a3b8;
 	}
 }
 
-.slide-map-container {
-	flex: 1;
-	min-height: 0;
-	background: rgba(2, 6, 23, 0.24);
-	border-radius: 14px;
-	border: 1px solid rgba(255, 255, 255, 0.04);
-	overflow: hidden;
+/* ── Text Slide ──────────────────────────────────────────────── */
+.slide-content--text {
+	padding: 18px 24px 14px;
+}
+
+.slide-main--text {
 	display: flex;
 	flex-direction: column;
-	animation: slideUpScale 0.8s cubic-bezier(0.23, 1, 0.32, 1) 0.3s both;
+	justify-content: center;
+	gap: 14px;
+	padding: 0 0 clamp(20px, 4vh, 40px);
+	overflow: hidden;
+	min-height: 0;
+}
+
+.slide-info--text {
+	max-width: 860px;
+	width: 100%;
+	margin: 0 auto;
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+
+	.slide-title {
+		text-align: left;
+		font-size: clamp(1.35rem, 2.1vw, 1.8rem);
+	}
+
+	.slide-subtitle {
+		text-align: left;
+	}
+}
+
+.slide-highlight {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) 0.2s both;
+}
+
+.highlight-value {
+	font-size: clamp(2rem, 4vw, 3rem);
+	font-weight: 900;
+	color: $accent;
+	font-family: 'JetBrains Mono', monospace;
+	line-height: 1;
+	text-shadow: 0 0 24px rgba(56, 189, 248, 0.45);
+}
+
+.slide-bullets {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	animation: slideUp 0.7s cubic-bezier(0.23, 1, 0.32, 1) 0.28s both;
+
+	li {
+		position: relative;
+		padding-left: 20px;
+		font-size: clamp(0.9rem, 1.1vw, 1.02rem);
+		line-height: 1.55;
+		color: rgba(226, 232, 240, 0.92);
+
+		&::before {
+			content: '▸';
+			position: absolute;
+			left: 0;
+			color: $accent;
+			font-size: 0.78em;
+			top: 0.2em;
+		}
+	}
+}
+
+.slide-text-body {
+	margin: 0;
+	font-size: clamp(0.95rem, 1.1vw, 1.05rem);
+	line-height: 1.7;
+	color: rgba(226, 232, 240, 0.85);
+	animation: slideUp 0.7s cubic-bezier(0.23, 1, 0.32, 1) 0.3s both;
+}
+
+/* ── Map Slide Styles ────────────────────────────────────────── */
+/* Map slides keep standard padding so nav arrows remain visible outside the card.
+   The glass panel is transparent, letting the persistent Mapbox layer show through.
+   pointer-events: none on the glass panel lets the map receive mouse/touch events. */
+.presentation-slide--map {
+	/* Keep same padding as other slides for consistent framing */
+}
+
+/* Internal layout: header → transparent viewport fill → footer */
+.slide-map-body {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.slide-map-header {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px 8px;
+	background: linear-gradient(to bottom, rgba(2, 6, 23, 0.88) 0%, transparent 100%);
+	pointer-events: none;
+}
+
+.slide-map-pagination-inline {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 12px;
+	color: rgba(148, 163, 184, 0.78);
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+
+	.current { color: $accent; font-weight: 700; }
+	.separator { opacity: 0.3; }
+}
+
+.slide-map-title {
+	margin: 0;
+	font-size: clamp(1rem, 1.5vw, 1.35rem);
+	font-weight: 700;
+	color: #f1f5f9;
+	line-height: 1.2;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) 0.1s both;
+}
+
+/* Transparent fill area — the map (canvas-persistent-map behind canvas-body) shows here */
+.slide-map-viewport {
+	flex: 1;
+	min-height: 0;
+}
+
+.slide-map-footer {
+	flex-shrink: 0;
+	padding: 24px 14px 10px;
+	background: linear-gradient(to top, rgba(2, 6, 23, 0.88) 0%, transparent 100%);
+	pointer-events: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.slide-map-desc {
+	margin: 0;
+	font-size: clamp(0.82rem, 0.95vw, 0.92rem);
+	line-height: 1.5;
+	color: rgba(226, 232, 240, 0.85);
+	animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) 0.2s both;
+}
+
+.slide-map-location-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 4px 10px 4px 7px;
+	border-radius: 999px;
+	background: rgba(56, 189, 248, 0.15);
+	border: 1px solid rgba(56, 189, 248, 0.35);
+	color: #7dd3fc;
+	font-size: 0.82rem;
+	font-weight: 600;
+	align-self: flex-start;
+	animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1) 0.3s both;
+
+	.material-icons-round { font-size: 0.95rem; color: #38bdf8; }
 }
 
 .slide-map-placeholder {
@@ -938,13 +1419,41 @@ $text-dim: #94a3b8;
 	bottom: 0;
 	left: 0;
 	right: 0;
-	height: 4px;
+	height: 24px;
 	z-index: 60;
+	display: flex;
+	align-items: flex-end;
+}
+
+.play-pause-btn {
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+	background: rgba(15, 23, 42, 0.72);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 4px 0 0 0;
+	color: rgba(148, 163, 184, 0.8);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: color 0.2s, background 0.2s;
+
+	&:hover {
+		color: $accent;
+		background: rgba(15, 23, 42, 0.9);
+	}
+
+	span {
+		font-size: 14px;
+		line-height: 1;
+	}
 }
 
 .progress-container {
-	width: 100%;
-	height: 100%;
+	flex: 1;
+	height: 4px;
+	align-self: flex-end;
 	background: rgba(255,255,255,0.05);
 }
 
