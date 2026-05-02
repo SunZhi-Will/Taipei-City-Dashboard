@@ -26,6 +26,7 @@ const {
 	handleDashboardRowClick,
 	handleComponentSyncToggle,
   handleComponentAnalyze,
+  handleComponentCityChange,
 } = useMapLayerSidebarContent(emit);
 </script>
 
@@ -65,6 +66,7 @@ const {
           @dashboard-click="handleDashboardRowClick"
           @component-toggle="handleComponentSyncToggle"
           @component-analyze="handleComponentAnalyze"
+          @component-city-change="handleComponentCityChange"
         />
 
         <button
@@ -88,6 +90,7 @@ const {
           @dashboard-click="handleDashboardRowClick"
           @component-toggle="handleComponentSyncToggle"
           @component-analyze="handleComponentAnalyze"
+          @component-city-change="handleComponentCityChange"
         />
       </div>
     </section>
@@ -130,6 +133,7 @@ const {
           @dashboard-click="handleDashboardRowClick"
           @component-toggle="handleComponentSyncToggle"
           @component-analyze="handleComponentAnalyze"
+          @component-city-change="handleComponentCityChange"
         />
       </div>
     </section>
