@@ -301,10 +301,10 @@ function returnChartComponent(name, svg) {
 	}
 }
 
-// AnimatedColumnChart 需要 history_data（含月份時間序列），其他圖表使用 chart_data
+// AnimatedColumnChart 優先使用 history_data（含月份時間序列）；無 history_config 時退回 chart_data
 const activeChartSeries = computed(() => {
 	if (activeChart.value === "AnimatedColumnChart") {
-		return props.config.history_data?.[0] ?? null;
+		return props.config.history_data?.[0] ?? props.config.chart_data ?? null;
 	}
 	return props.config.chart_data;
 });
