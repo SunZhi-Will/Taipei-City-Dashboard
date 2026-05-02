@@ -2,77 +2,144 @@
 import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import ChatResultComponents from "../dialogs/ChatResultComponents.vue";
 import ChatComposer from "../dialogs/chat/ChatComposer.vue";
 import SuggestedTagsBar from "../dialogs/chat/SuggestedTagsBar.vue";
 
-marked.setOptions({ breaks: true });
 const renderMarkdown = (text) => {
 	const raw = String(text || "").trim();
 	if (!raw) return "";
 
-	const sanitizedHtml = DOMPurify.sanitize(marked.parse(raw));
-	if (!sanitizedHtml.includes("<table")) return sanitizedHtml;
+	// HTML entity escaping (XSS prevention, no external sanitizer needed)
+	const esc = (str) =>
+		String(str)
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
 
-	const wrapper = document.createElement("div");
-	wrapper.innerHTML = sanitizedHtml;
+	// Inline Markdown: bold, italic, inline code
+	const inline = (str) =>
+		esc(str)
+			.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+			.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+			.replace(/\*(.+?)\*/g, "<em>$1</em>")
+			.replace(/__(.+?)__/g, "<strong>$1</strong>")
+			.replace(/_(.+?)_/g, "<em>$1</em>")
+			.replace(/`([^`]+)`/g, "<code>$1</code>");
 
-	for (const table of wrapper.querySelectorAll("table")) {
-		table.classList.add("ai-table");
-
-		if (!table.parentElement?.classList.contains("ai-table-wrapper")) {
-			const tableWrapper = document.createElement("div");
-			tableWrapper.className = "ai-table-wrapper";
-			table.insertAdjacentElement("beforebegin", tableWrapper);
-			tableWrapper.appendChild(table);
+	// Table block parser — replicates same paragraph-extraction & empty-table logic
+	const parseTable = (tableLines) => {
+		const rows = [];
+		for (const line of tableLines) {
+			const t = line.trim();
+			if (!t.startsWith("|")) continue;
+			if (/^\|[\s|:-]+\|$/.test(t)) continue; // separator row
+			const cells = t.split("|").slice(1, -1).map((c) => c.trim());
+			if (cells.length > 0) rows.push(cells);
 		}
+		if (rows.length === 0) return "";
 
+		const headerRow = rows[0];
+		const bodyRows = rows.slice(1);
 		const extractedParagraphs = [];
+		const dataRows = [];
 
-		for (const row of table.querySelectorAll("tbody tr")) {
-			const cells = Array.from(row.querySelectorAll("td"));
-			if (cells.length < 2) continue;
-
-			const firstCellText = (cells[0]?.textContent || "").trim();
-			const hasOnlyFirstCellContent = cells.slice(1).every((cell) => !(cell.textContent || "").trim());
+		for (const row of bodyRows) {
+			const firstCellText = row[0] || "";
+			const hasOnlyFirstCell = row.slice(1).every((c) => !c.trim());
 			const looksLikeParagraph = /[，。！？；：]/.test(firstCellText) && firstCellText.length >= 18;
-
-			if (hasOnlyFirstCellContent && looksLikeParagraph) {
+			if (hasOnlyFirstCell && looksLikeParagraph) {
 				extractedParagraphs.push(firstCellText);
-				row.remove();
+			} else {
+				dataRows.push(row);
 			}
 		}
 
-		if (extractedParagraphs.length > 0 && table.parentElement) {
-			const tableWrapper = table.parentElement.classList.contains("ai-table-wrapper")
-				? table.parentElement
-				: table;
-			let anchor = tableWrapper;
-			for (const paragraphText of extractedParagraphs) {
-				const paragraph = document.createElement("p");
-				paragraph.className = "acp__table-followup";
-				paragraph.textContent = paragraphText;
-				anchor.insertAdjacentElement("afterend", paragraph);
-				anchor = paragraph;
+		let html = "";
+		if (dataRows.length > 0) {
+			html += '<div class="ai-table-wrapper"><table class="ai-table"><thead><tr>';
+			for (const cell of headerRow) html += `<th>${inline(cell)}</th>`;
+			html += "</tr></thead><tbody>";
+			for (const row of dataRows) {
+				html += "<tr>";
+				for (const cell of row) html += `<td>${inline(cell)}</td>`;
+				html += "</tr>";
 			}
+			html += "</tbody></table></div>";
+		}
+		for (const p of extractedParagraphs) {
+			html += `<p class="acp__table-followup">${inline(p)}</p>`;
+		}
+		return html;
+	};
+
+	const lines = raw.split("\n");
+	const result = [];
+	let i = 0;
+
+	while (i < lines.length) {
+		const line = lines[i];
+		const trimmed = line.trim();
+
+		if (!trimmed) { i++; continue; }
+
+		// Heading
+		const headingMatch = trimmed.match(/^(#{1,6}) (.+)/);
+		if (headingMatch) {
+			const level = headingMatch[1].length;
+			result.push(`<h${level}>${inline(headingMatch[2])}</h${level}>`);
+			i++;
+			continue;
 		}
 
-		const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
-		const hasAnyBodyText = bodyRows.some((row) =>
-			Array.from(row.querySelectorAll("td")).some((cell) => (cell.textContent || "").trim()),
-		);
-		if (!hasAnyBodyText) {
-			const parent = table.parentElement;
-			table.remove();
-			if (parent?.classList.contains("ai-table-wrapper") && !parent.children.length) {
-				parent.remove();
-			}
+		// Table
+		if (trimmed.startsWith("|")) {
+			const tableLines = [];
+			while (i < lines.length && lines[i].trim().startsWith("|")) tableLines.push(lines[i++]);
+			const tableHtml = parseTable(tableLines);
+			if (tableHtml) result.push(tableHtml);
+			continue;
+		}
+
+		// Unordered list
+		if (/^[-*+] /.test(trimmed)) {
+			const items = [];
+			while (i < lines.length && /^[-*+] /.test(lines[i].trim()))
+				items.push(`<li>${inline(lines[i++].trim().replace(/^[-*+] /, ""))}</li>`);
+			result.push(`<ul>${items.join("")}</ul>`);
+			continue;
+		}
+
+		// Ordered list
+		if (/^\d+\. /.test(trimmed)) {
+			const items = [];
+			while (i < lines.length && /^\d+\. /.test(lines[i].trim()))
+				items.push(`<li>${inline(lines[i++].trim().replace(/^\d+\. /, ""))}</li>`);
+			result.push(`<ol>${items.join("")}</ol>`);
+			continue;
+		}
+
+		// Paragraph (collect until blank line or block element)
+		const paraLines = [];
+		while (
+			i < lines.length &&
+			lines[i].trim() &&
+			!lines[i].trim().startsWith("|") &&
+			!/^[-*+] /.test(lines[i].trim()) &&
+			!/^\d+\. /.test(lines[i].trim()) &&
+			!/^#{1,6} /.test(lines[i].trim())
+		) {
+			paraLines.push(lines[i]);
+			i++;
+			if (i < lines.length && !lines[i].trim()) break;
+		}
+		if (paraLines.length > 0) {
+			result.push(`<p>${paraLines.map((l) => inline(l)).join("<br>")}</p>`);
 		}
 	}
 
-	return wrapper.innerHTML;
+	return result.join("");
 };
 
 import { useAiStudioChatStore } from "../../store/aiStudioChatStore";
