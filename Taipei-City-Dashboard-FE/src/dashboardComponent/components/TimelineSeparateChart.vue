@@ -183,7 +183,7 @@ watch(
 
     <VueApexCharts
       width="100%"
-      :height="showControls ? '210px' : '260px'"
+      :height="showControls ? '260px' : '310px'"
       type="line"
       :options="chartOptions"
       :series="localSeries"
@@ -259,6 +259,7 @@ watch(
 	}
 
 	.material-icons-round {
+		font-family: var(--font-icon);
 		font-size: 18px;
 		line-height: 1;
 	}

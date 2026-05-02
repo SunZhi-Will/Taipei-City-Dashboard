@@ -41,11 +41,22 @@ const dashboardCreationLoading = ref(false);
 const tagsRefreshKey = ref(0);
 
 // === 建議 Tags ===
-const DEFAULT_TAGS = [
-	"空氣品質", "交通壅塞", "捷運人流", "垃圾清運", "醫療資源", "老年人口",
-];
+// 初始：從現有儀表板名稱取前 6 個；AI 回覆後換成模型生成的 Tag
+const suggestedTags = ref([]);
 
-const suggestedTags = ref([...DEFAULT_TAGS]);
+function buildInitialTags() {
+	const names = [];
+	for (const dashboards of contentStore.dashboards.values()) {
+		for (const d of dashboards) {
+			if (d.name && !d.index?.includes('map-layers')) {
+				names.push(d.name);
+			}
+			if (names.length >= 6) break;
+		}
+		if (names.length >= 6) break;
+	}
+	return names;
+}
 
 // 點擊 tag 直接送出
 const clickTag = async (tag) => {
@@ -53,30 +64,32 @@ const clickTag = async (tag) => {
 	await addQueryData({ role: "user", content: tag });
 };
 
-// bot 回覆後，根據內容動態更新相關 tags
+onMounted(() => {
+	suggestedTags.value = buildInitialTags();
+});
+
+watch(
+	() => contentStore.dashboards.size,
+	() => {
+		if (suggestedTags.value.length === 0) {
+			suggestedTags.value = buildInitialTags();
+		}
+	},
+);
+
 watch(
 	chatData,
 	(newVal) => {
 		const lastBot = [...newVal].reverse().find((m) => m.role === "bot" && !m.isDefault);
-		if (!lastBot) return;
-		const content = (lastBot.content || "") + (lastBot.components?.map((c) => c.name).join(" ") || "");
-		const contextMap = [
-			{ keywords: ["空氣", "PM2.5", "AQI", "污染"], tags: ["PM2.5 即時", "空氣品質指標", "各站空品"] },
-			{ keywords: ["交通", "車流", "速率", "壅塞"], tags: ["路口車流量", "公車即時", "停車場資訊"] },
-			{ keywords: ["捷運", "MRT", "地鐵"], tags: ["捷運進出站", "各線人流", "延誤查詢"] },
-			{ keywords: ["垃圾", "清運", "廢棄物", "回收"], tags: ["垃圾清運量", "資源回收率", "廚餘處理"] },
-			{ keywords: ["老年", "老化", "長照", "扶養"], tags: ["老化指數", "長照資源", "社福補助"] },
-			{ keywords: ["醫療", "醫院", "診所", "救護"], tags: ["醫院分布", "AED 位置", "119 統計"] },
-			{ keywords: ["水", "用水", "降雨", "水庫"], tags: ["水庫蓄水率", "降雨量統計", "淹水警戒"] },
-			{ keywords: ["電", "用電", "能源", "再生"], tags: ["用電量統計", "太陽能發電", "碳排放量"] },
-		];
-		for (const rule of contextMap) {
-			if (rule.keywords.some((k) => content.includes(k))) {
-				suggestedTags.value = [...rule.tags, ...DEFAULT_TAGS.filter((t) => !rule.tags.includes(t)).slice(0, 3)];
-				return;
-			}
+		if (!lastBot) {
+			suggestedTags.value = buildInitialTags();
+			return;
 		}
-		suggestedTags.value = [...DEFAULT_TAGS];
+		if (Array.isArray(lastBot.suggestedTags) && lastBot.suggestedTags.length > 0) {
+			suggestedTags.value = lastBot.suggestedTags;
+			return;
+		}
+		suggestedTags.value = buildInitialTags();
 	},
 	{ deep: true },
 );

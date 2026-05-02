@@ -43,7 +43,7 @@ defineEmits(["onClose"]);
 	top: 0;
 	left: 0;
 	opacity: 1;
-	z-index: 10;
+	z-index: 2000;
 
 	&-background {
 		width: 100vw;

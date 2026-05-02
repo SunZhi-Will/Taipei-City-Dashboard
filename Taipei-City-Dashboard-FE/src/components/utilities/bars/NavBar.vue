@@ -227,13 +227,14 @@ const isLocalhost = computed(() => {
 	background-color: var(--color-component-background);
 	user-select: none;
 	position: relative;
-	z-index: 2001;
+	z-index: 1000;
 	overflow: visible;
 
     &-logo {
       display: flex;
       align-items: center;
       height: 100%;
+      transform: translateY(-1px);
 
       &-link {
         display: flex;
@@ -296,73 +297,74 @@ const isLocalhost = computed(() => {
         height: 100%;
         gap: 4px;
       }
+    }
 
-      &-theme-separator {
-        margin: 0 8px;
-        opacity: 0.5;
-        font-weight: 300;
-        display: flex;
-        align-items: center;
-        height: 100%;
+    &-theme-separator {
+      margin: 0 8px;
+      opacity: 0.5;
+      font-weight: 300;
+      display: flex;
+      align-items: center;
+      height: 100%;
 
-        @media screen and (max-width: 768px) {
-          display: none;
-        }
+      @media screen and (max-width: 768px) {
+        display: none;
+      }
+    }
+
+    &-theme-name {
+      display: contents;
+      display: flex;
+      align-items: center;
+      height: 100%;
+      gap: 6px;
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: var(--color-highlight);
+      line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+      cursor: pointer;
+      
+      &:active {
+        opacity: 0.7;
       }
 
-      &-theme-name {
-        display: flex;
-        align-items: center;
-        height: 100%;
-        gap: 6px;
-        font-size: var(--font-s);
-        font-weight: 500;
-        color: var(--color-highlight);
-        line-height: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 200px;
-        cursor: pointer;
-        
-        &:active {
-          opacity: 0.7;
-        }
-
-        @media screen and (max-width: 768px) {
-          max-width: 160px;
-          background: rgba(255, 255, 255, 0.08);
-          padding: 6px 10px;
-          border-radius: 8px;
-          min-height: 36px;
-          height: auto; /* Reset height on mobile to keep the button shape */
-        }
-
-        @media screen and (max-width: 480px) {
-          max-width: 120px;
-          font-size: 0.85rem;
-        }
+      @media screen and (max-width: 768px) {
+        max-width: none;
+        background: transparent;
+        padding: 4px 8px;
+        border-radius: 0;
+        min-height: auto;
+        height: auto;
       }
 
-      &-theme-icon {
-        font-size: calc(var(--font-m) * var(--font-to-icon));
-        display: flex;
-        align-items: center;
+      @media screen and (max-width: 480px) {
+        max-width: none;
+        font-size: 1rem;
       }
+    }
 
-      &-theme-arrow {
-        font-size: 18px;
-        color: var(--color-highlight);
-        margin-left: 2px;
-        transition: transform 0.3s ease;
-        display: flex;
-        align-items: center;
-      }
+    &-theme-icon {
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+    }
 
-      &-name--active {
-        .navbar-theme-arrow {
-          transform: rotate(180deg);
-        }
+    &-theme-arrow {
+      font-size: 18px;
+      color: var(--color-highlight);
+      margin-left: 2px;
+      transition: transform 0.3s ease;
+      display: flex;
+      align-items: center;
+    }
+
+    &-theme-name--active {
+      .navbar-theme-arrow {
+        transform: rotate(180deg);
       }
     }
 

@@ -57,6 +57,19 @@ CREATE TABLE IF NOT EXISTS public.food_poisoning_place (
     UNIQUE (year, place)
 );
 
+-- 舊環境可能已存在早期建立、但沒有唯一約束的表；補上唯一索引供 ON CONFLICT 使用
+CREATE UNIQUE INDEX IF NOT EXISTS food_poisoning_trend_year_month_key
+    ON public.food_poisoning_trend (year, month);
+
+CREATE UNIQUE INDEX IF NOT EXISTS food_poisoning_cause_year_cause_key
+    ON public.food_poisoning_cause (year, cause);
+
+CREATE UNIQUE INDEX IF NOT EXISTS food_poisoning_food_year_food_type_key
+    ON public.food_poisoning_food (year, food_type);
+
+CREATE UNIQUE INDEX IF NOT EXISTS food_poisoning_place_year_place_key
+    ON public.food_poisoning_place (year, place);
+
 -- ============================================================
 -- 2. 插入 food_poisoning_trend Mock 資料（2016–2025）
 --    資料來源格式：衛福部食藥署 API（年-月別案件數）

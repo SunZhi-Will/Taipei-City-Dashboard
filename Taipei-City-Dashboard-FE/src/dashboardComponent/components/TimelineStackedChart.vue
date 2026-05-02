@@ -150,7 +150,7 @@ watch(
   <div v-if="activeChart === 'TimelineStackedChart' && localSeries.length > 0">
     <VueApexCharts
       width="100%"
-      height="260px"
+      height="310px"
       type="area"
       :options="chartOptions"
       :series="localSeries"

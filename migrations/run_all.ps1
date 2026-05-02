@@ -26,7 +26,7 @@ if (-not $env:PGPASSWORD) {
 function Run-Sql($file, $label, $container, $database) {
     Write-Host ""
     Write-Host "===== $label =====" -ForegroundColor Cyan
-    Get-Content $file -Raw | docker exec -i -e PGPASSWORD=$env:PGPASSWORD $container psql -U $User -d $database
+    Get-Content $file -Raw | docker exec -i -e PGPASSWORD=$env:PGPASSWORD $container psql -v ON_ERROR_STOP=1 -U $User -d $database
     if ($LASTEXITCODE -ne 0) {
         throw "$label 失敗，exit code $LASTEXITCODE"
     }
@@ -53,6 +53,7 @@ Run-Sql "attach_to_dashboard_air_station_map.sql"      "Step 3：掛到 dashboar
 Run-Sql "add_food_safety_data_tables.sql"              "Step 4：建立食安資料表與 mock 資料（dashboard DB）" $DataContainer $DataDatabase
 Run-Sql "add_food_safety_components.sql"               "Step 5：建立食安組件 metadata（manager DB）" $ManagerContainer $ManagerDatabase
 Run-Sql "add_school_kitchen_wholesale_components.sql"  "Step 6：補完學校廚房 + 農藥殘留地圖（manager DB）" $ManagerContainer $ManagerDatabase
+Run-Sql "fix_food_safety_zero_chart_queries.sql"       "Step 7：修正食安圖表 0 值查詢（manager DB）" $ManagerContainer $ManagerDatabase
 
 Write-Host ""
 Write-Host "✅ 全部完成！重整瀏覽器看地圖" -ForegroundColor Green

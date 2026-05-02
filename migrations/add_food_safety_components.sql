@@ -166,27 +166,27 @@ BEGIN
     INSERT INTO public.component_charts (index, color, types, unit) VALUES
         ('taipei_imap_food',
             '{#4CAF50,#FF9800,#F44336}',
-            '{DonutChart}',
+            '{DonutChart,AnimatedColumnChart}',
             NULL),
         ('ntpc_food_factory',
             '{#FF7043}',
             '{MapLegend}',
             NULL),
         ('food_poisoning_trend',
-            '{#EF5350}',
-            '{AnimatedColumnChart}',
+            '{#EF5350,#42A5F5,#66BB6A,#FFA726,#AB47BC,#26C6DA,#8D6E63,#EC407A,#7E57C2,#29B6F6,#9CCC65,#FF7043}',
+            '{AnimatedColumnChart,TimelineSeparateChart}',
             '件'),
         ('food_poisoning_cause',
             '{#EF5350,#FF7043,#FFA726,#FFCA28,#66BB6A,#26C6DA,#42A5F5,#7E57C2,#EC407A,#8D6E63}',
-            '{BarChart}',
+            '{DonutChart,BarChart}',
             '件'),
         ('food_poisoning_food',
             '{#FF7043,#FFA726,#FFCA28,#66BB6A,#26C6DA,#42A5F5,#7E57C2,#EC407A}',
-            '{BarChart}',
+            '{DonutChart,BarChart}',
             '件'),
         ('food_poisoning_place',
             '{#42A5F5,#66BB6A,#FFA726,#FF7043,#EC407A,#7E57C2,#26C6DA,#8D6E63}',
-            '{BarChart}',
+            '{DonutChart,BarChart}',
             '件')
     ON CONFLICT (index) DO UPDATE SET
         color = EXCLUDED.color,
@@ -200,9 +200,8 @@ BEGIN
     -- ============================================================
 
     -- taipei_imap_food（臺北）
-    -- DonutChart 在地圖模式下從 GeoJSON → timeStore 讀取月份資料
-    -- query_chart 提供靜態標籤供非地圖模式 fallback
-    DELETE FROM public.query_charts WHERE index = 'taipei_imap_food' AND city = 'taipei';
+    -- query_chart 需直接統計資料表，否則 chart endpoint 會回落成全 0
+    DELETE FROM public.query_charts WHERE index = 'taipei_imap_food' AND city IN ('taipei', 'metrotaipei');
         DELETE FROM public.query_charts WHERE index = 'ntpc_food_factory' AND city = 'metrotaipei';
         INSERT INTO public.query_charts
         (index, history_config, map_config_ids, map_filter,
@@ -210,24 +209,50 @@ BEGIN
          source, short_desc, long_desc, use_case,
          links, contributors, created_at, updated_at,
          query_type, query_chart, query_history, city)
-    VALUES (
+    SELECT
         'taipei_imap_food',
-        NULL,
+        '{"range":["fiveyear_ago"],"color":["#4CAF50","#FF9800","#F44336"],"unit":"件"}'::json,
         ARRAY[v_food_map_id],
         '{"mode":"byParam","byParam":{"xParam":"result"}}',
         'static', NULL, 1, 'month',
         '臺北市衛生局',
         '臺北市食品業者月別抽驗結果分布地圖，依月份動態顯示合格、複查與不合格比例。',
-        '資料來源為臺北市政府衛生局食品藥物管理資訊系統（iMAPFood），收錄各食品業者每月抽驗結果（A1 合格/A2 合格/B1 正在複查/不符規定）。DonutChart 依月份動態呈現三類比例，搭配地圖圓點同步篩選。',
+        '資料來源為臺北市政府衛生局食品藥物管理資訊系統（iMAPFood），收錄各食品業者每月抽驗結果（A1 合格/A2 合格/B1 正在複查/不符規定）。DonutChart 依月份動態呈現三類比例，搭配地圖圓點同步篩選，AnimatedColumnChart 顯示各月份分類變化。',
         '適用於追蹤臺北市食品安全現況、抽驗合格率趨勢，以及高風險區域識別。',
         '{https://imap.taipei.gov.tw/}',
         '{doit}',
         NOW(), NOW(),
         'two_d',
-        $q$SELECT unnest(ARRAY['合格', '正在複查', '不合格']) AS x_axis, unnest(ARRAY[0, 0, 0]) AS data$q$,
-        NULL,
-        'taipei'
-    );
+        $q$SELECT CASE
+                         WHEN result IN ('A1', 'A2') THEN '合格'
+                         WHEN result = 'A3' THEN '正在複查'
+                         ELSE '不合格'
+                     END AS x_axis,
+                     COUNT(*)::float AS data
+                FROM public.taipei_imap_food
+               GROUP BY 1
+               ORDER BY MIN(CASE
+                                WHEN result IN ('A1', 'A2') THEN 1
+                                WHEN result = 'A3' THEN 2
+                                ELSE 3
+                            END)$q$,
+        $q$SELECT (month || '-01')::timestamptz AS x_axis,
+                   CASE
+                       WHEN result IN ('A1', 'A2') THEN '合格'
+                       WHEN result = 'A3' THEN '正在複查'
+                       ELSE '不合格'
+                   END AS y_axis,
+                   COUNT(*)::int AS data
+              FROM public.taipei_imap_food
+             GROUP BY 1, 2
+             ORDER BY 1,
+                      MIN(CASE
+                              WHEN result IN ('A1', 'A2') THEN 1
+                              WHEN result = 'A3' THEN 2
+                              ELSE 3
+                          END)$q$,
+        city_name
+    FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
 
     -- ntpc_food_factory（雙北）
     INSERT INTO public.query_charts
@@ -258,14 +283,14 @@ BEGIN
     -- food_poisoning_trend（臺北）
     -- AnimatedColumnChart：x_axis = 年份（YYYY-01-01），y_axis = 月份（01月～12月）
     -- 動畫按年逐步播放，每年顯示 12 個月別案件數長條
-    DELETE FROM public.query_charts WHERE index = 'food_poisoning_trend' AND city = 'taipei';
+    DELETE FROM public.query_charts WHERE index = 'food_poisoning_trend' AND city IN ('taipei', 'metrotaipei');
         INSERT INTO public.query_charts
         (index, history_config, map_config_ids, map_filter,
          time_from, time_to, update_freq, update_freq_unit,
          source, short_desc, long_desc, use_case,
          links, contributors, created_at, updated_at,
          query_type, query_chart, query_history, city)
-    VALUES (
+    SELECT
         'food_poisoning_trend',
         NULL, '{}', '{}',
         'static', NULL, 1, 'year',
@@ -284,8 +309,8 @@ BEGIN
 FROM public.food_poisoning_trend
 ORDER BY year, month$q$,
         NULL,
-        'taipei'
-    );
+        city_name
+    FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
 
     -- food_poisoning_cause（臺北）
     -- BarChart：顯示最近一年各病因物質案件數
@@ -483,7 +508,6 @@ ORDER BY cases DESC$q$,
             '食品安全',
             ARRAY[
                 v_taipei_food_cid,
-                v_ntpc_factory_cid,
                 v_fp_trend_cid,
                 v_fp_cause_cid,
                 v_fp_food_cid,
@@ -498,7 +522,6 @@ ORDER BY cases DESC$q$,
         SET
             components = ARRAY[
                 v_taipei_food_cid,
-                v_ntpc_factory_cid,
                 v_fp_trend_cid,
                 v_fp_cause_cid,
                 v_fp_food_cid,

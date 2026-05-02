@@ -23,7 +23,6 @@ export function useMapLayerSidebarContent(emit) {
 	const loadingDashboardKey = ref("");
 	const dashboardComponentsCache = ref({});
 	const componentToggles = ref({});
-	const componentCitySelections = ref({});
 	const activatedOpenComponentId = ref(null);
 	const queuedOpenComponentId = ref(null);
 
@@ -53,10 +52,6 @@ export function useMapLayerSidebarContent(emit) {
 
 	function buildDashboardKey(scope, index, city) {
 		return `${scope}:${city || "private"}:${index}`;
-	}
-
-	function buildComponentSelectionKey(dashboardIndex, city, componentIndex) {
-		return `${dashboardIndex}:${city || "private"}:${componentIndex}`;
 	}
 
 	function componentKey(dashboard, city, component) {
@@ -152,26 +147,10 @@ export function useMapLayerSidebarContent(emit) {
 
 	function getDashboardComponents(dashboard, city) {
 		const raw = dashboardComponentsCache.value[dashboard.index] || [];
-		const baseComponents = city
-			? raw.filter((item) => item.city === city)
-			: getUniquePrivateComponents(raw);
-
-		return baseComponents.map((component) => {
-			const selectionKey = buildComponentSelectionKey(
-				dashboard.index,
-				city,
-				component.index,
-			);
-			const selectedCity =
-				componentCitySelections.value[selectionKey] || component.city;
-
-			return (
-				raw.find(
-					(item) =>
-						item.index === component.index && item.city === selectedCity,
-				) || component
-			);
-		});
+		if (city) {
+			return raw.filter((item) => item.city === city);
+		}
+		return getUniquePrivateComponents(raw);
 	}
 
 	async function ensureDashboardComponents(dashboardIndex) {
@@ -236,71 +215,10 @@ export function useMapLayerSidebarContent(emit) {
 	}
 
 	function handleComponentAnalyze({ dashboard, city, component }) {
-		if (!hasMapConfig(component)) {
-			dialogStore.showNotification("info", "本組件沒有空間資料，無法互動分析");
-			return;
-		}
 		emit("open-analysis", {
 			dashboard,
 			city,
 			component,
-		});
-	}
-
-	function handleComponentCityChange({ dashboard, city, component, nextCity }) {
-		if (!nextCity || nextCity === component.city) {
-			return;
-		}
-
-		const raw = dashboardComponentsCache.value[dashboard.index] || [];
-		const nextComponent = raw.find(
-			(item) => item.index === component.index && item.city === nextCity,
-		);
-
-		if (!nextComponent) {
-			return;
-		}
-
-		const selectionKey = buildComponentSelectionKey(
-			dashboard.index,
-			city,
-			component.index,
-		);
-		const previousToggleKey = componentKey(dashboard, city, component);
-		const nextToggleKey = componentKey(dashboard, city, nextComponent);
-		const wasEnabled = Boolean(componentToggles.value[previousToggleKey]);
-
-		componentCitySelections.value[selectionKey] = nextCity;
-
-		if (previousToggleKey !== nextToggleKey) {
-			delete componentToggles.value[previousToggleKey];
-		}
-
-		if (!wasEnabled) {
-			componentToggles.value[nextToggleKey] = false;
-			return;
-		}
-
-		if (hasMapConfig(component)) {
-			mapStore.clearByParamFilter(component.map_config);
-			mapStore.turnOffMapLayerVisibility(component.map_config);
-		}
-
-		if (!hasMapConfig(nextComponent)) {
-			componentToggles.value[nextToggleKey] = false;
-			emit("close-analysis", {
-				component,
-			});
-			dialogStore.showNotification("info", "切換後的組件沒有空間資料，不會渲染地圖");
-			return;
-		}
-
-		mapStore.addToMapLayerList(nextComponent.map_config);
-		componentToggles.value[nextToggleKey] = true;
-		emit("open-analysis", {
-			dashboard,
-			city,
-			component: nextComponent,
 		});
 	}
 
@@ -381,6 +299,5 @@ export function useMapLayerSidebarContent(emit) {
 		handleDashboardRowClick,
 		handleComponentSyncToggle,
 		handleComponentAnalyze,
-		handleComponentCityChange,
 	};
 }

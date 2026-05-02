@@ -821,6 +821,7 @@ export const queryByTwai = async (question, chatHistory = [], options = {}) => {
 			toolTimeline: response.data.data.tool_timeline || [],
 			agentResult,
 			displayPlan,
+			suggestedTags: response.data.data.suggested_tags || [],
 			meta: {
 				latency_ms: response.data.data.latency_ms,
 				model: response.data.data.model,

@@ -81,6 +81,7 @@ const props = defineProps({
 	presentationMode: { type: Boolean, default: false },
 	noOuterContainer: { type: Boolean, default: false },
 	initialChartType: { type: String, default: '' },
+	expandBtn: { type: Boolean, default: true },
 });
 
 const emits = defineEmits([
@@ -98,6 +99,7 @@ const emits = defineEmits([
 	"changeCity",
 	"expandLayout"
 ]);
+
 
 const activeChart = ref(
 	props.initialChartType && props.config.chart_config.types.includes(props.initialChartType)
@@ -123,6 +125,51 @@ const toggleOn = computed({
 
 const mousePosition = ref({ x: null, y: null });
 const showTagTooltip = ref(false);
+const showPopup = ref(false);
+
+// Floating popup drag state
+const popupPos = ref({ x: 0, y: 0 });
+const isDragging = ref(false);
+let _dragOffset = { x: 0, y: 0 };
+
+watch(showPopup, (val) => {
+	if (val) {
+		const w = Math.min(860, window.innerWidth * 0.88);
+		const h = Math.min(560, window.innerHeight * 0.78);
+		popupPos.value = {
+			x: Math.max(0, (window.innerWidth - w) / 2),
+			y: Math.max(0, (window.innerHeight - h) / 2),
+		};
+	}
+});
+
+function onDragStart(e) {
+	if (e.target.closest('.dc-popup-close')) return;
+	e.preventDefault();
+	isDragging.value = true;
+	document.body.style.userSelect = 'none';
+	_dragOffset = {
+		x: e.clientX - popupPos.value.x,
+		y: e.clientY - popupPos.value.y,
+	};
+	window.addEventListener('mousemove', onDragging);
+	window.addEventListener('mouseup', onDragEnd);
+}
+
+function onDragging(e) {
+	if (!isDragging.value) return;
+	popupPos.value = {
+		x: Math.max(0, Math.min(window.innerWidth - 100, e.clientX - _dragOffset.x)),
+		y: Math.max(0, Math.min(window.innerHeight - 44, e.clientY - _dragOffset.y)),
+	};
+}
+
+function onDragEnd() {
+	isDragging.value = false;
+	document.body.style.userSelect = '';
+	window.removeEventListener('mousemove', onDragging);
+	window.removeEventListener('mouseup', onDragEnd);
+}
 
 // Parses time data into display format
 const dataTime = computed(() => {
@@ -253,6 +300,18 @@ function returnChartComponent(name, svg) {
 		return svg ? MapLegendSvg : MapLegend;
 	}
 }
+
+// AnimatedColumnChart 需要 history_data（含月份時間序列），其他圖表使用 chart_data
+const activeChartSeries = computed(() => {
+	if (activeChart.value === "AnimatedColumnChart") {
+		return props.config.history_data?.[0] ?? null;
+	}
+	return props.config.chart_data;
+});
+
+defineExpose({
+	showPopup
+});
 </script>
 
 <template>
@@ -369,12 +428,12 @@ function returnChartComponent(name, svg) {
           class="dashboardcomponent-header-toggle"
         >
           <button
-            v-if="fullscreenBtn"
-            class="fullscreen-btn"
-            :title="expandedInContent ? '返回網格' : '展開內容區'"
-            @click="toggleContentLayout"
+            v-if="expandBtn"
+            class="dc-expand-btn"
+            title="放大視窗"
+            @click="showPopup = true"
           >
-            <span>{{ expandedInContent ? 'close_fullscreen' : 'open_in_full' }}</span>
+            <span class="material-icons-round">open_in_new</span>
           </button>
           <label class="toggleswitch">
             <input
@@ -478,7 +537,7 @@ function returnChartComponent(name, svg) {
           :active-chart="activeChart"
           :active-city="activeCity"
           :chart_config="config.chart_config"
-          :series="config.chart_data"
+          :series="activeChartSeries"
           :map_config="config.map_config"
           :map_filter="config.map_filter"
           :map_filter_on="mode.includes('map')"
@@ -569,6 +628,56 @@ function returnChartComponent(name, svg) {
     </div>
   </div>
   <Teleport to="body">
+    <div
+      v-if="showPopup"
+      class="dc-popup"
+      :class="{ 'dc-popup--dragging': isDragging }"
+      :style="{ left: popupPos.x + 'px', top: popupPos.y + 'px' }"
+    >
+      <div
+        class="dc-popup-header"
+        @mousedown="onDragStart"
+      >
+        <span class="dc-popup-title">{{ config.name }}</span>
+        <button
+          class="dc-popup-close"
+          title="關閉"
+          @click="showPopup = false"
+        >
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      <div class="dc-popup-body">
+        <component
+          :is="returnChartComponent(activeChart)"
+          :key="`popup-${config.index}-${activeChart}`"
+          :active-chart="activeChart"
+          :active-city="activeCity"
+          :chart_config="config.chart_config"
+          :series="activeChartSeries"
+          :map_config="config.map_config"
+          :map_filter="config.map_filter"
+          :map_filter_on="mode.includes('map')"
+          :show-color-legend="true"
+          @filter-by-param="
+            (map_filter, map_config, x, y) =>
+              $emit('filterByParam', map_filter, map_config, x, y)
+          "
+          @filter-by-layer="
+            (map_config, x) => $emit('filterByLayer', map_config, x)
+          "
+          @clear-by-param-filter="
+            (map_config) => $emit('clearByParamFilter', map_config)
+          "
+          @clear-by-layer-filter="
+            (map_config) => $emit('clearByLayerFilter', map_config)
+          "
+          @fly="(location) => $emit('fly', location)"
+        />
+      </div>
+    </div>
+  </Teleport>
+  <Teleport to="body">
     <!-- The class "chart-tooltip" could be edited in /assets/styles/chartStyles.css -->
     <TagTooltip
       v-if="showTagTooltip"
@@ -630,18 +739,18 @@ button:hover {
 	transition: var(--transition-normal);
 
 	@media (min-width: 1050px) {
-		height: 370px;
-		max-height: 370px;
+		height: 420px;
+		max-height: 420px;
 	}
 
 	@media (min-width: 1650px) {
-		height: 400px;
-		max-height: 400px;
+		height: 450px;
+		max-height: 450px;
 	}
 
 	@media (min-width: 2200px) {
-		height: 500px;
-		max-height: 500px;
+		height: 550px;
+		max-height: 550px;
 	}
 
 	&-header {
@@ -848,7 +957,7 @@ button:hover {
 	&-chart,
 	&-loading,
 	&-error {
-		height: 75%;
+		height: 80%;
 		position: relative;
 		padding-top: 0.5%;
 		overflow-y: auto;
@@ -968,23 +1077,124 @@ button:hover {
 	}
 }
 
+.dc-expand-btn {
+	width: 22px;
+	height: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--color-complement-text);
+	cursor: pointer;
+	opacity: 0.65;
+	transition: opacity 0.2s, color 0.2s;
+	margin-right: 4px;
+
+	&:hover {
+		opacity: 1;
+		color: var(--color-highlight);
+	}
+
+	.material-icons-round {
+		font-family: var(--font-icon);
+		font-size: 16px;
+	}
+}
+
+.dc-popup {
+	position: fixed;
+	z-index: 9999;
+	width: min(860px, 88vw);
+	height: min(560px, 78vh);
+	min-width: 320px;
+	min-height: 240px;
+	resize: both;
+	background: var(--color-component-background);
+	border-radius: 12px;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55);
+	overflow: hidden;
+
+	&--dragging {
+		* { cursor: grabbing !important; }
+	}
+
+	&-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 1rem;
+		height: 44px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		flex-shrink: 0;
+		cursor: move;
+		user-select: none;
+	}
+
+	&-title {
+		font-size: var(--font-m);
+		font-weight: 600;
+		color: var(--color-normal-text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	&-close {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-complement-text);
+		cursor: pointer;
+		border-radius: 50%;
+		transition: background 0.18s, color 0.18s;
+		flex-shrink: 0;
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.12);
+			color: #fff;
+		}
+
+		.material-icons-round {
+			font-family: var(--font-icon);
+			font-size: 18px;
+		}
+	}
+
+	&-body {
+		flex: 1;
+		min-height: 0;
+		padding: 12px 16px 16px;
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+
+		> * {
+			height: 100%;
+			min-height: 0;
+		}
+	}
+}
+
 .large {
-	height: 350px;
-	max-height: 350px;
+	height: 400px;
+	max-height: 400px;
 
 	@media (min-width: 820px) {
-		height: 380px;
-		max-height: 380px;
+		height: 430px;
+		max-height: 430px;
 	}
 
 	@media (min-width: 1200px) {
-		height: 420px;
-		max-height: 420px;
+		height: 470px;
+		max-height: 470px;
 	}
 
 	@media (min-width: 2200px) {
-		height: 520px;
-		max-height: 520px;
+		height: 570px;
+		max-height: 570px;
 	}
 }
 

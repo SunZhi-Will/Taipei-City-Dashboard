@@ -170,6 +170,7 @@ func ChatWithTWCC(c *gin.Context) {
 			"answer_mode": answerMode,
 			"agent_result": chatResult.AgentResult,
 			"display_plan": chatResult.DisplayPlan,
+			"suggested_tags": chatResult.SuggestedTags,
 			"latency_ms":  logEntry.LatencyMS,
 			"model":       logEntry.Model,
 			"provider":    logEntry.Provider,

@@ -68,16 +68,15 @@ watch(islandCollapsed, (newVal) => {
 
 <style scoped lang="scss">
 .map-island-shell {
-	position: absolute;
-	top: 68px;
-	left: 12px;
-	z-index: 20;
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
 	overflow: visible;
 }
 
 .map-island {
 	width: 260px;
-	max-height: calc(100vh - 80px);
+	max-height: 100%;
 	display: flex;
 	flex-direction: column;
 	background: rgba(12, 16, 19, 0.82);

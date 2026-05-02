@@ -127,6 +127,15 @@ type QuertChartAndConponentForQdrant struct {
     UseCase  string `gorm:"column:use_case"`
 }
 
+var aiSearchExcludedIndexes = map[string]struct{}{
+	"ntpc_food_factory": {},
+}
+
+func isAIExcludedIndex(index string) bool {
+	_, excluded := aiSearchExcludedIndexes[strings.ToLower(strings.TrimSpace(index))]
+	return excluded
+}
+
 /* ----- Handlers ----- */
 
 // GetPublicComponentsForQdrant fetches all query_charts and components that are part of a public (non-personal) dashboard.
@@ -145,7 +154,8 @@ func GetPublicComponentsForQdrant() (results []QuertChartAndConponentForQdrant, 
     err = DBManager.Table("query_charts as qc").
         Select("c.id, qc.index, c.name, qc.city, qc.long_desc, qc.use_case").
         Joins("INNER JOIN components c ON qc.index = c.index").
-        Where("c.id IN (?)", subQueryComponents).
+		Where("c.id IN (?)", subQueryComponents).
+		Where("qc.index NOT IN ?", []string{"ntpc_food_factory"}).
         Scan(&results).Error
 
     if err != nil {
@@ -365,6 +375,10 @@ func GetComponentByQueryVectorRich(queryString string, limit int, scoreThreshold
 
 	rich := make([]CityComponentScoreRich, 0, len(items))
 	for _, item := range items {
+		if isAIExcludedIndex(item.index) {
+			continue
+		}
+
 		r := CityComponentScoreRich{
 			ID: item.id, Index: item.index, Name: item.name, City: item.city, Score: item.score,
 		}

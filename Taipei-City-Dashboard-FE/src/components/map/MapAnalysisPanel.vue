@@ -1,11 +1,13 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { useMapStore } from "../../store/mapStore";
+import { useContentStore } from "../../store/contentStore";
 import http from "../../router/axios";
 import { getComponentDataTimeframe } from "../../assets/utilityFunctions/dataTimeframe";
 import DashboardComponent from "../../dashboardComponent/DashboardComponent.vue";
 
 const mapStore = useMapStore();
+const contentStore = useContentStore();
 
 const props = defineProps({
 	component: {
@@ -19,6 +21,33 @@ const resolvedComponent = ref(null);
 const panelLoading = ref(false);
 const panelError = ref("");
 const panelTitle = computed(() => resolvedComponent.value?.name || props.component?.name || "未命名組件");
+const panelCityTag = computed(() => {
+	if (!resolvedComponent.value?.city) {
+		return [];
+	}
+	return contentStore.cityManager.getTagList(resolvedComponent.value.city);
+});
+const panelSelectList = computed(() => {
+	if (!resolvedComponent.value?.index) {
+		return [];
+	}
+
+	const siblingComponents = contentStore.cityDashboard?.components?.filter(
+		(item) => item.index === resolvedComponent.value.index,
+	) || [];
+
+	if (siblingComponents.length === 0) {
+		return contentStore.cityManager.getSelectList(resolvedComponent.value.city);
+	}
+
+	const cities = [...new Set(siblingComponents.map((item) => item.city).filter(Boolean))];
+	return contentStore.cityManager.getCities(cities);
+});
+const panelSelectDisabled = computed(() => panelSelectList.value.length <= 1);
+const panelHasMapConfig = computed(() => {
+	const cfg = resolvedComponent.value?.map_config;
+	return Array.isArray(cfg) && cfg.length > 0 && Boolean(cfg[0]);
+});
 
 function cloneComponent(component) {
 	try {
@@ -165,6 +194,35 @@ function clearFiltersAndClose() {
 	}
 	emit("close");
 }
+
+const dashboardComponentRef = ref(null);
+
+function handleExpand() {
+	if (dashboardComponentRef.value) {
+		dashboardComponentRef.value.showPopup = true;
+	}
+}
+
+async function handleChangeCity(city) {
+	if (!resolvedComponent.value || !city || resolvedComponent.value.city === city) {
+		return;
+	}
+
+	const selectedData = contentStore.cityDashboard?.components?.find((item) => (
+		item.index === resolvedComponent.value.index && item.city === city
+	));
+
+	if (!selectedData) {
+		return;
+	}
+
+	if (resolvedComponent.value?.map_config?.length) {
+		mapStore.clearByParamFilter(resolvedComponent.value.map_config);
+		mapStore.clearByLayerFilter(resolvedComponent.value.map_config);
+	}
+
+	await hydrateAnalysisComponent(selectedData);
+}
 </script>
 
 <template>
@@ -172,6 +230,15 @@ function clearFiltersAndClose() {
 		<p class="map-analysis-panel-tag">
 			互動分析｜{{ panelTitle }}
 		</p>
+
+		<button
+			type="button"
+			title="放大分析"
+			class="map-analysis-panel-expand"
+			@click="handleExpand"
+		>
+			<span class="material-icons-round">open_in_new</span>
+		</button>
 
 		<button
 			type="button"
@@ -184,22 +251,27 @@ function clearFiltersAndClose() {
 
     <DashboardComponent
 			v-if="resolvedComponent"
+			ref="dashboardComponentRef"
 			:config="resolvedComponent"
 			:no-outer-container="true"
-      mode="map"
-      :toggle-on="true"
-      :toggle-disable="true"
+			:mode="panelHasMapConfig ? 'map' : 'default'"
+			:toggle-on="panelHasMapConfig"
+			:toggle-disable="!panelHasMapConfig"
       :footer="false"
       :fullscreen-btn="false"
-      :select-btn="false"
+			:expand-btn="false"
+			:select-btn="true"
+			:select-btn-disabled="panelSelectDisabled"
+			:select-btn-list="panelSelectList"
       :info-btn="false"
-      :city-tag="[]"
+			:city-tag="panelCityTag"
 			:active-city="resolvedComponent.city"
       @filter-by-param="handleFilterByParam"
       @filter-by-layer="handleFilterByLayer"
       @clear-by-param-filter="handleClearByParamFilter"
       @clear-by-layer-filter="handleClearByLayerFilter"
       @fly="handleFly"
+			@change-city="handleChangeCity"
     />
 
 		<div
@@ -221,13 +293,10 @@ function clearFiltersAndClose() {
 
 <style scoped lang="scss">
 .map-analysis-panel {
-	position: absolute;
-	left: 12px;
-	bottom: 12px;
+	position: relative;
+	flex-shrink: 0;
 	width: min(340px, 30vw);
 	height: min(360px, 42vh);
-	z-index: 21;
-	display: block;
 
 	:deep(.dashboardcomponent) {
 		height: 100%;
@@ -241,10 +310,6 @@ function clearFiltersAndClose() {
 		transform: none;
 	}
 
-	:deep(.dashboardcomponent-header-toggle .toggleswitch) {
-		opacity: 0.55;
-	}
-
 	:deep(.dashboardcomponent-fullscreen-container) {
 		display: contents;
 	}
@@ -256,7 +321,7 @@ function clearFiltersAndClose() {
 		z-index: 2;
 		margin: 0;
 		padding: 3px 8px;
-		max-width: calc(100% - 60px);
+		max-width: calc(100% - 85px);
 		font-size: 0.72rem;
 		line-height: 1.3;
 		white-space: nowrap;
@@ -268,10 +333,10 @@ function clearFiltersAndClose() {
 		border-radius: 999px;
 	}
 
+	&-expand,
 	&-close {
 		position: absolute;
 		top: 7px;
-		right: 8px;
 		z-index: 2;
 		width: 28px;
 		height: 28px;
@@ -292,6 +357,17 @@ function clearFiltersAndClose() {
 		&:hover {
 			background: rgba(15, 23, 42, 0.85);
 		}
+	}
+
+	&-expand {
+		right: 44px;
+		span {
+			font-size: 0.85rem !important;
+		}
+	}
+
+	&-close {
+		right: 8px;
 	}
 
 	&-loading {

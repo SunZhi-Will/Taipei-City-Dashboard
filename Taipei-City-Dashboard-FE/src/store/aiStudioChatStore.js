@@ -167,6 +167,7 @@ export const useAiStudioChatStore = defineStore('aiStudioChat', () => {
 								components.length > 0 ? 'presentation' : 'web',
 							),
 						components: components.length > 0 ? components : undefined,
+						suggestedTags: twaiResult.suggestedTags,
 					});
 
 					saveChatLog(newChatData.content, finalContent, {

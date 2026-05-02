@@ -170,7 +170,10 @@ onMounted(() => {
               >{{ collapsedStates.favorites ? "arrow_drop_down" : "arrow_drop_up" }}</span>
             </h2>
             <transition name="collapse">
-              <template v-if="!collapsedStates.favorites">
+              <div 
+                v-if="!collapsedStates.favorites"
+                class="sidebar-sub-group"
+              >
                 <SideBarTab
                   icon="favorite"
                   title="收藏組件"
@@ -178,7 +181,7 @@ onMounted(() => {
                   :index="contentStore.favorites?.index"
                   :level="3"
                 />
-              </template>
+              </div>
             </transition>
             <h2 @click="toggleCollapse('personal')">
               <span class="sidebar-icon material-icons-round">person</span>
@@ -203,7 +206,10 @@ onMounted(() => {
               <p>{{ isExpanded ? `尚無個人儀表板 ` : `尚無` }}</p>
             </div>
             <transition name="collapse">
-              <div v-if="!collapsedStates.personal">
+              <div 
+                v-if="!collapsedStates.personal"
+                class="sidebar-sub-group"
+              >
                 <SideBarTab
                   v-for="item in contentStore.personalDashboards.filter(
                     (item) => item.icon !== 'favorite'
@@ -258,6 +264,7 @@ onMounted(() => {
                   !collapsedStates[city] &&
                     contentStore.getDashboardsByCity(city)?.length > 0
                 "
+                class="sidebar-sub-group"
               >
                 <SideBarTab
                   v-for="item in contentStore.getDashboardsByCity(city)"
@@ -354,7 +361,7 @@ text-rendering: optimizeLegibility;
 font-feature-settings: "liga";
 font-size: 16px;
 min-width: 16px;
-margin-left: auto;
+margin-left: 8px;
 margin-right: 0;
 display: inline-flex;
 align-items: center;
@@ -414,9 +421,10 @@ background-color: var(--color-sidebar-item-hover-bg);
 h2 {
 display: flex;
 align-items: center;
+justify-content: center;
 height: 2.25rem;
 margin: 2px 8px;
-padding: 0 10px 0 8px;
+padding: 0 10px;
 font-size: var(--font-m);
 font-weight: 400;
 color: var(--color-normal-text);
@@ -451,7 +459,20 @@ background-color: var(--color-sidebar-item-hover-bg);
 }
 }
 
-&-add-item {
+  &-sub-group {
+    background-color: rgba(255, 255, 255, 0.04);
+    margin: 4px 8px;
+    padding: 4px 0;
+    border-radius: 12px;
+    
+    .sidebar-collapse & {
+      margin: 0;
+      padding: 0;
+      background-color: transparent;
+    }
+  }
+
+  &-add-item {
 display: flex;
 align-items: center;
 width: calc(100% - 16px);
@@ -533,7 +554,7 @@ width: 3.5rem;
 min-width: 3.5rem;
 
 h1 {
-justify-content: flex-start;
+justify-content: center;
 padding: 0;
 margin-left: 0;
 margin-right: 0;
@@ -545,13 +566,12 @@ display: none;
 }
 
 .sidebar-icon {
-margin-left: calc((3.5rem - 16px) / 2);
-margin-right: 0;
+margin: 0;
 }
 }
 
 h2 {
-justify-content: flex-start;
+justify-content: center;
 padding: 0;
 margin-left: 0;
 margin-right: 0;
@@ -562,8 +582,7 @@ display: none;
 }
 
 .sidebar-icon {
-margin-left: calc((3.5rem - 16px) / 2);
-margin-right: 0;
+margin: 0;
 }
 }
 

@@ -153,7 +153,7 @@ const popularThemeGA = (title) => {
 	}
 
 	&-level-3 {
-		padding-left: 14px;
+		padding-left: 20px;
 	}
 }
 </style>

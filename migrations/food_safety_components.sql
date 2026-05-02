@@ -178,8 +178,7 @@ BEGIN
 		('food_poisoning_cause', '致病原因分布'),
 		('food_poisoning_food', '可能中毒食品分布'),
 		('food_poisoning_place', '食品中毒攝食場所'),
-		('wholesale_pesticide_inspection_taipei', '臺北蔬果農藥檢驗'),
-		('wholesale_pesticide_inspection', '雙北蔬果農藥檢驗')
+		('wholesale_pesticide_inspection', '蔬果農藥殘留檢驗')
 	ON CONFLICT (index) DO UPDATE
 	SET name = EXCLUDED.name;
 
@@ -195,14 +194,13 @@ BEGIN
 	-- component_charts
 	INSERT INTO public.component_charts (index, color, types, unit)
 	VALUES
-		('taipei_imap_food', '{#39D98A,#F5C542,#FF6B6B}', '{DonutChart}', '件'),
+		('taipei_imap_food', '{#39D98A,#F5C542,#FF6B6B}', '{DonutChart,AnimatedColumnChart}', '件'),
 		('ntpc_food_factory', '{#FF7043}', '{MapLegend}', '家'),
-		('food_poisoning_trend', '{#39D98A,#FF6B6B,#F5C542}', '{AnimatedColumnChart,TimelineSeparateChart}', '件'),
+		('food_poisoning_trend', '{#EF5350,#42A5F5,#66BB6A,#FFA726,#AB47BC,#26C6DA,#8D6E63,#EC407A,#7E57C2,#29B6F6,#9CCC65,#FF7043}', '{AnimatedColumnChart,TimelineSeparateChart}', '件'),
 		('food_poisoning_cause', '{#FF6B6B,#FF8C42,#FFD166,#8BD448,#2EC4B6,#4D96FF,#9B5DE5,#F15BB5,#8D99AE,#A98467}', '{DonutChart,BarChart}', '件'),
 		('food_poisoning_food', '{#4D96FF,#3A86FF,#FF6B6B,#F4A261,#FFD166,#8BD448,#2EC4B6,#9B5DE5,#F15BB5,#8D99AE}', '{DonutChart,BarChart}', '件'),
-		('food_poisoning_place', '{#4D96FF,#39D98A,#F5C542,#FF8C42,#FF6B6B,#9B5DE5,#2EC4B6,#A98467,#8D99AE,#90BE6D,#FFB703,#6C757D}', '{BarChart,DonutChart}', '件'),
-		('wholesale_pesticide_inspection_taipei', '{#39D98A,#F5C542,#FF6B6B}', '{DonutChart}', '件'),
-		('wholesale_pesticide_inspection', '{#39D98A,#F5C542,#FF6B6B}', '{DonutChart}', '件')
+		('food_poisoning_place', '{#4D96FF,#39D98A,#F5C542,#FF8C42,#FF6B6B,#9B5DE5,#2EC4B6,#A98467,#8D99AE,#90BE6D,#FFB703,#6C757D}', '{DonutChart,BarChart}', '件'),
+		('wholesale_pesticide_inspection', '{#39D98A,#F5C542,#FF6B6B}', '{DonutChart,BarChart}', '件')
 	ON CONFLICT (index) DO UPDATE
 	SET color = EXCLUDED.color,
 		types = EXCLUDED.types,
@@ -217,7 +215,6 @@ BEGIN
 		'food_poisoning_cause',
 		'food_poisoning_food',
 		'food_poisoning_place',
-		'wholesale_pesticide_inspection_taipei',
 		'wholesale_pesticide_inspection'
 	);
 
@@ -231,7 +228,7 @@ BEGIN
 	)
 	SELECT
 		'taipei_imap_food',
-		NULL,
+		'{"range":["fiveyear_ago"],"color":["#4CAF50","#FF9800","#F44336"],"unit":"件"}'::json,
 		ARRAY[v_taipei_food_map_id::integer],
 		'{"mode":"byParam","byParam":{"xParam":"result"}}'::json,
 		'static',
@@ -240,7 +237,7 @@ BEGIN
 		'month',
 		'臺北市衛生局',
 		'臺北市食品抽驗結果，依月份與結果類型呈現。',
-		'使用 taipei_imap_food 資料表動態統計抽驗結果，將 A1/A2 合併為合格，A3 視為正在複查，其他結果視為不合格。',
+		'使用 taipei_imap_food 資料表動態統計抽驗結果，將 A1/A2 合併為合格，A3 視為正在複查，其他結果視為不合格；並提供月份動畫時序資料。',
 		'適用於監控臺北市食品抽驗風險與月份變化。',
 		'{https://imap.taipei.gov.tw/}'::text[],
 		'{doit}'::text[],
@@ -268,7 +265,21 @@ BEGIN
 							 END = '正在複查' THEN 2
 						ELSE 3
 					END$q$,
-		NULL,
+		$q$SELECT (month || '-01')::timestamptz AS x_axis,
+				 CASE
+					 WHEN result IN ('A1', 'A2') THEN '合格'
+					 WHEN result = 'A3' THEN '正在複查'
+					 ELSE '不合格'
+				 END AS y_axis,
+				 COUNT(*)::int AS data
+			FROM public.taipei_imap_food
+		   GROUP BY 1, 2
+		   ORDER BY 1,
+					MIN(CASE
+						WHEN result IN ('A1', 'A2') THEN 1
+						WHEN result = 'A3' THEN 2
+						ELSE 3
+					END)$q$,
 		city_name
 	FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
 
@@ -447,43 +458,7 @@ BEGIN
 		city_name
 	FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
 
-	-- wholesale_pesticide_inspection_taipei
-	INSERT INTO public.query_charts (
-		index, history_config, map_config_ids, map_filter,
-		time_from, time_to, update_freq, update_freq_unit,
-		source, short_desc, long_desc, use_case,
-		links, contributors, created_at, updated_at,
-		query_type, query_chart, query_history, city
-	)
-	VALUES (
-		'wholesale_pesticide_inspection_taipei',
-		NULL,
-		ARRAY[v_taipei_wholesale_map_id::integer],
-		'{"mode":"byParam","byParam":{"xParam":"result"}}'::json,
-		'static',
-		NULL,
-		1,
-		'day',
-		'臺北農產運銷公司',
-		'臺北批發市場農藥殘留檢驗結果。',
-		'統計臺北第一與第二批發市場資料，將非「合格」結果統一視為不合格。',
-		'適用於檢視臺北批發市場蔬果農藥殘留風險。',
-		'{https://www.tapmc.com.tw/}'::text[],
-		'{doit}'::text[],
-		NOW(),
-		NOW(),
-		'two_d',
-		$q$SELECT CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END AS x_axis,
-				 COUNT(*)::float AS data
-			FROM public.wholesale_pesticide_inspection
-		   WHERE market IN ('第一批發市場', '第二批發市場')
-		   GROUP BY 1
-		   ORDER BY CASE WHEN CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END = '合格' THEN 1 ELSE 2 END$q$,
-		NULL,
-		'taipei'
-	);
-
-	-- wholesale_pesticide_inspection
+	-- wholesale_pesticide_inspection (taipei & metrotaipei)
 	INSERT INTO public.query_charts (
 		index, history_config, map_config_ids, map_filter,
 		time_from, time_to, update_freq, update_freq_unit,
@@ -494,29 +469,29 @@ BEGIN
 	SELECT
 		'wholesale_pesticide_inspection',
 		NULL,
-		ARRAY[v_wholesale_map_id::integer],
+		ARRAY[CASE WHEN city_name = 'taipei' THEN v_taipei_wholesale_map_id ELSE v_wholesale_map_id END::integer],
 		'{"mode":"byParam","byParam":{"xParam":"result"}}'::json,
 		'static',
 		NULL,
 		1,
 		'day',
-		'臺北農產運銷公司 / 新北市果菜運銷公司',
-		'雙北批發市場農藥殘留檢驗結果。',
-		'直接統計 wholesale_pesticide_inspection 全量資料，將非「合格」結果統一視為不合格。',
-		'適用於檢視雙北批發市場蔬果農藥殘留風險。',
-		'{https://www.tapmc.com.tw/,https://www.ntpm.com.tw/}'::text[],
+		CASE WHEN city_name = 'taipei' THEN '臺北農產運銷公司' ELSE '臺北農產運銷公司 / 新北市果菜運銷公司' END,
+		CASE WHEN city_name = 'taipei' THEN '臺北批發市場農藥殘留檢驗結果。' ELSE '雙北批發市場農藥殘留檢驗結果。' END,
+		'統計批發市場資料，將非「合格」結果統一視為不合格。',
+		'適用於檢視批發市場蔬果農藥殘留風險。',
+		CASE WHEN city_name = 'taipei' THEN '{https://www.tapmc.com.tw/}'::text[] ELSE '{https://www.tapmc.com.tw/,https://www.ntpm.com.tw/}'::text[] END,
 		'{doit}'::text[],
 		NOW(),
 		NOW(),
 		'two_d',
-		$q$SELECT CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END AS x_axis,
-				 COUNT(*)::float AS data
-			FROM public.wholesale_pesticide_inspection
-		   GROUP BY 1
-		   ORDER BY CASE WHEN CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END = '合格' THEN 1 ELSE 2 END$q$,
+		CASE WHEN city_name = 'taipei' 
+			 THEN $q$SELECT CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END AS x_axis, COUNT(*)::float AS data FROM public.wholesale_pesticide_inspection WHERE market IN ('第一批發市場', '第二批發市場') GROUP BY 1 ORDER BY MIN(CASE WHEN result = '合格' THEN 1 ELSE 2 END)$q$
+			 ELSE $q$SELECT CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END AS x_axis, COUNT(*)::float AS data FROM public.wholesale_pesticide_inspection GROUP BY 1 ORDER BY MIN(CASE WHEN result = '合格' THEN 1 ELSE 2 END)$q$
+		END,
 		NULL,
 		city_name
-	FROM (VALUES ('metrotaipei'::text)) AS cities(city_name);
+	FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
+
 
 	SELECT id INTO v_map_layers_taipei_id
 	FROM public.dashboards
@@ -573,7 +548,7 @@ BEGIN
 			v_cause_cid::integer,
 			v_trend_cid::integer,
 			v_place_cid::integer,
-			v_taipei_wholesale_cid::integer
+			v_wholesale_cid::integer
 		],
 		'health_and_safety',
 		NOW(),
@@ -605,8 +580,7 @@ BEGIN
 			v_cause_cid::integer,
 			v_trend_cid::integer,
 			v_place_cid::integer,
-			v_wholesale_cid::integer,
-			v_ntpc_factory_cid::integer
+			v_wholesale_cid::integer
 		],
 		'health_and_safety',
 		NOW(),

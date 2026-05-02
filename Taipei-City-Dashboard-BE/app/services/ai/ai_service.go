@@ -93,12 +93,13 @@ type DisplayPlan struct {
 }
 
 type AIChatResult struct {
-	Log        *models.AIChatLog    `json:"log"`
-	UsedTools  []string             `json:"used_tools"`
-	ToolResults map[string]string   `json:"tool_results,omitempty"`
-	ToolTimeline []ToolExecution    `json:"tool_timeline,omitempty"`
-	AgentResult *AgentResult        `json:"agent_result,omitempty"`
-	DisplayPlan *DisplayPlan        `json:"display_plan,omitempty"`
+	Log           *models.AIChatLog    `json:"log"`
+	UsedTools     []string             `json:"used_tools"`
+	ToolResults   map[string]string   `json:"tool_results,omitempty"`
+	ToolTimeline  []ToolExecution    `json:"tool_timeline,omitempty"`
+	AgentResult   *AgentResult        `json:"agent_result,omitempty"`
+	DisplayPlan   *DisplayPlan        `json:"display_plan,omitempty"`
+	SuggestedTags []string            `json:"suggested_tags,omitempty"`
 }
 
 type ToolExecution struct {
@@ -285,7 +286,7 @@ func (s *aiSession) injectInstructions() {
 		toolNames += t.Function.Name
 	}
 
-	instruction := fmt.Sprintf("\nSystem Instruction:\n1. Use ONLY: [%s].\n2. NEVER nest tool calls.\n3. Arguments MUST be literal values (strings, integers, etc.), never function calls.\n4. For dependent tasks, call tools sequentially in separate turns.\n5. If stuck, respond with plain text.\n6. 若使用者要求具體數值、最近變化、趨勢比較，必須先呼叫 retrieve_components_by_query 選出元件，再呼叫 get_component_chart_data 取得資料後才能回答；回答時必須帶出數值與時間範圍。\n7. 若 retrieve_components_by_query 回傳 count=0 或 results 為空，直接告知使用者找不到相關組件，建議換用不同關鍵詞；不可捏造不存在的組件或數值。可嘗試降低 score 至 0.75 重試一次。\n8. 主題相關性自我檢查：收到 retrieve_components_by_query 結果後，必須逐一判斷每筆組件是否與使用者查詢主題直接相關。若某組件名稱或描述顯然屬於不同主題領域（例如：查詢「交通」卻出現「空氣品質」；查詢「年齡分布」卻出現「地圖測站」），必須將該組件從推薦清單中排除，不得展示給使用者，也不得呼叫 get_component_chart_data 取得其數據。\n\nStyle Guide:\n- Role: 你是臺北市城市大數據儀表板的智慧助理，回覆對象是一般市民。\n- 語氣：清楚、友善、專業；避免過度口語與過多 emoji。\n- 城市名：只能使用「臺北」或「雙北」，不得出現 metrotaipei 或 taipei 等技術字眼。\n- 組件推薦：若有 2 筆以上結果，使用 Markdown 表格，欄位順序為「排名｜城市名｜組件名｜數值」。\n- 數據填充：「數值」欄位必須使用呼叫 get_component_chart_data 後得到的最近數據（含單位），若尚未獲取數據或該組件無數值則留空，不可填估算值。\n- 表格規範：表格內只能放資料列，禁止把完整句子、提醒語、結語放進表格欄位。\n- 版面規範：表格結束後必須空一行，再用一般段落補充說明。\n- 說明內容：可提示「可加入個人儀表板」與下一步建議，但要放在表格外。\n- 禁忌：不得出現 RAG、tool、score、index、id、主結果、候選、檢索、關聯性、分數、相似度等技術用語。", toolNames)
+	instruction := fmt.Sprintf("\nSystem Instruction:\n1. Use ONLY: [%s].\n2. NEVER nest tool calls.\n3. Arguments MUST be literal values (strings, integers, etc.), never function calls.\n4. For dependent tasks, call tools sequentially in separate turns.\n5. If stuck, respond with plain text.\n6. 若使用者要求具體數值、最近變化、趨勢比較，必須先呼叫 retrieve_components_by_query 選出元件，再呼叫 get_component_chart_data 取得資料後才能回答；回答時必須帶出數值與時間範圍。\n7. 若 retrieve_components_by_query 回傳 count=0 或 results 為空，直接告知使用者找不到相關組件，建議換用不同關鍵詞；不可捏造不存在的組件或數值。可嘗試降低 score 至 0.75 重試一次。\n8. 主題相關性自我檢查：收到 retrieve_components_by_query 結果後，必須逐一判斷每筆組件是否與使用者查詢主題直接相關。若某組件名稱或描述顯然屬於不同主題領域（例如：查詢「交通」卻出現「空氣品質」；查詢「年齡分布」卻出現「地圖測站」），必須將該組件從推薦清單中排除，不得展示給使用者，也不得呼叫 get_component_chart_data 取得其數據。\n\nSuggested Tags Rule:\n- 請在回覆的最末尾，根據當前對話上下文提供 3-5 個後續查詢建議標籤（每個標籤 2-6 字）。\n- 格式要求：必須用 [TAGS] 與 [/TAGS] 包裹，標籤間用繁體逗號分隔。例如：[TAGS] 交通流量, 捷運人流, 停車資訊 [/TAGS]\n- 若你一時無法判斷最適合的標籤，仍必須輸出 [TAGS] 區塊，提供通用但與城市資料探索相關的查詢標籤。\n\nStyle Guide:\n- Role: 你是臺北市城市大數據儀表板的智慧助理，回覆對象是一般市民。\n- 語氣：清楚、友善、專業；避免過度口語與過多 emoji。\n- 城市名：只能使用「臺北」或「雙北」，不得出現 metrotaipei 或 taipei 等技術字眼。\n- 組件推薦：若有 2 筆以上結果，使用 Markdown 表格，欄位順序為「排名｜城市名｜組件名｜數值」。\n- 數據填充：「數值」欄位必須使用呼叫 get_component_chart_data 後得到的最近數據（含單位），若尚未獲取數據或該組件無數值則留空，不可填估算值。\n- 表格規範：表格內只能放資料列，禁止把完整句子、提醒語、結語放進表格欄位。\n- 版面規範：表格結束後必須空一行，再用一般段落補充說明。\n- 說明內容：可提示「可加入個人儀表板」與下一步建議，但要放在表格外。\n- 禁忌：不得出現 RAG、tool、score、index、id、主結果、候選、檢索、關聯性、分數、相似度等技術用語。", toolNames)
 
 	if s.req.AppMode == "ai_studio" {
 		instruction += `
@@ -447,14 +448,79 @@ func (s *aiSession) finalize() (*AIChatResult, error) {
 		displayPlan = buildDisplayPlan(log.Question, s.req.AppMode, rawAnswer, agentResult)
 	}
 
+	suggestedTags := extractSuggestedTags(rawAnswer)
+	cleanAnswer = stripTagsFromAnswer(cleanAnswer)
+	log.Answer = cleanAnswer
+
 	return &AIChatResult{
-		Log:         log,
-		UsedTools:   append([]string{}, s.executedTools...),
-		ToolResults: copyToolResults(s.toolResults),
-		ToolTimeline: copyToolTimeline(s.toolTimeline),
-		AgentResult: agentResult,
-		DisplayPlan: displayPlan,
+		Log:           log,
+		UsedTools:     append([]string{}, s.executedTools...),
+		ToolResults:   copyToolResults(s.toolResults),
+		ToolTimeline:  copyToolTimeline(s.toolTimeline),
+		AgentResult:   agentResult,
+		DisplayPlan:   displayPlan,
+		SuggestedTags: suggestedTags,
 	}, nil
+}
+
+func extractSuggestedTags(answer string) []string {
+	startTag := "[TAGS]"
+	endTag := "[/TAGS]"
+	startIdx := strings.Index(answer, startTag)
+	if startIdx == -1 {
+		return nil
+	}
+	endIdx := strings.Index(answer[startIdx+len(startTag):], endTag)
+	if endIdx == -1 {
+		return nil
+	}
+	endIdx += startIdx + len(startTag)
+
+	tagsStr := answer[startIdx+len(startTag) : endIdx]
+	replacer := strings.NewReplacer("\n", "，", "、", "，", ",", "，", ";", "，", "；", "，")
+	tags := strings.Split(replacer.Replace(tagsStr), "，")
+
+	result := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, t := range tags {
+		trimmed := strings.TrimSpace(t)
+		if trimmed == "" {
+			continue
+		}
+		runeLen := len([]rune(trimmed))
+		if runeLen < 2 || runeLen > 12 {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+		if len(result) >= 5 {
+			break
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func stripTagsFromAnswer(answer string) string {
+	startTag := "[TAGS]"
+	endTag := "[/TAGS]"
+	startIdx := strings.Index(answer, startTag)
+	if startIdx == -1 {
+		return answer
+	}
+	endIdx := strings.Index(answer, endTag)
+	if endIdx == -1 {
+		return strings.TrimSpace(answer[:startIdx])
+	}
+	prefix := answer[:startIdx]
+	suffix := answer[endIdx+len(endTag):]
+	return strings.TrimSpace(prefix + suffix)
 }
 
 func (s *aiSession) latestToolResult(name string) string {

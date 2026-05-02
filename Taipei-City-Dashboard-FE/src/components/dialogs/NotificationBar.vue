@@ -49,7 +49,7 @@ const statusToIcon = {
 	position: fixed;
 	top: 20px;
 	left: 50%;
-	z-index: 100;
+	z-index: 9999;
 	display: flex;
 	align-items: center;
 	padding: 0 var(--font-ms);

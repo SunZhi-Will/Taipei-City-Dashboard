@@ -230,7 +230,7 @@ watch(
     <VueApexCharts
       type="line"
       width="100%"
-      height="260px"
+      height="310px"
       :options="chartOptions"
       :series="parseSeries"
     />

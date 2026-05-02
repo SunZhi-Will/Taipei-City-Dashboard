@@ -130,7 +130,7 @@ BEGIN
             NULL),
         ('wholesale_pesticide_inspection',
             '{#4CAF50,#F44336}',
-            '{DonutChart}',
+            '{DonutChart,BarChart}',
             NULL)
     ON CONFLICT (index) DO UPDATE SET
         color = EXCLUDED.color,
@@ -144,6 +144,7 @@ BEGIN
     -- ============================================================
 
     -- school_kitchen_imap（臺北）
+    -- 目前來源為靜態 GeoJSON，dashboard DB 無對應資料表，chart query 需保存既有統計值
     DELETE FROM public.query_charts
     WHERE index = 'school_kitchen_imap' AND city = 'taipei';
 
@@ -168,14 +169,14 @@ BEGIN
         NOW(), NOW(),
         'two_d',
         $q$SELECT unnest(ARRAY['A1優良','A2合格','B1限改','不符規定']) AS x_axis,
-               unnest(ARRAY[0,0,0,0]) AS data$q$,
+               unnest(ARRAY[40,12,1,1])::float AS data$q$,
         NULL,
         'taipei'
     );
 
-    -- wholesale_pesticide_inspection（雙北）
+    -- wholesale_pesticide_inspection (taipei & metrotaipei)
     DELETE FROM public.query_charts
-    WHERE index = 'wholesale_pesticide_inspection' AND city = 'metrotaipei';
+    WHERE index = 'wholesale_pesticide_inspection' AND city IN ('taipei', 'metrotaipei');
 
     INSERT INTO public.query_charts
         (index, history_config, map_config_ids, map_filter,
@@ -183,25 +184,27 @@ BEGIN
          source, short_desc, long_desc, use_case,
          links, contributors, created_at, updated_at,
          query_type, query_chart, query_history, city)
-    VALUES (
+    SELECT
         'wholesale_pesticide_inspection',
         NULL,
         ARRAY[v_pesticide_map_id],
         '{"mode":"byParam","byParam":{"xParam":"result"}}',
         'static', NULL, 1, 'day',
-        '臺北農產運銷公司 + 新北市果菜運銷公司',
-        '雙北 4 座果菜批發市場（第一/第二/三重/板橋）每日蔬果農藥殘留快篩結果地圖。',
-        '每日由 PDf 公告解析，涵蓋臺北第一、第二批發市場及新北三重、板橋果菜市場。合格以綠點、不合格（超標）以紅點標示，不合格筆數點擊可查看農藥名稱與數值。',
-        '適用於追蹤市場蔬果農藥殘留現況，輔助消費者選購安全蔬果及稽查機關重點管控。',
-        '{https://www.tapmc.com.tw/,https://www.ntpm.com.tw/}',
+        CASE WHEN city_name = 'taipei' THEN '臺北農產運銷公司' ELSE '臺北農產運銷公司 + 新北市果菜運銷公司' END,
+        CASE WHEN city_name = 'taipei' THEN '臺北批發市場農藥殘留檢驗結果。' ELSE '雙北批發市場農藥殘留檢驗結果。' END,
+        '統計批發市場資料，將非「合格」結果統一視為不合格。',
+        '適用於檢視批發市場蔬果農藥殘留風險。',
+        CASE WHEN city_name = 'taipei' THEN '{https://www.tapmc.com.tw/}'::text[] ELSE '{https://www.tapmc.com.tw/,https://www.ntpm.com.tw/}'::text[] END,
         '{doit}',
         NOW(), NOW(),
         'two_d',
-        $q$SELECT unnest(ARRAY['合格','不合格']) AS x_axis,
-               unnest(ARRAY[0,0]) AS data$q$,
+        CASE WHEN city_name = 'taipei' 
+               THEN $q$SELECT CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END AS x_axis, COUNT(*)::float AS data FROM public.wholesale_pesticide_inspection WHERE market IN ('第一批發市場', '第二批發市場') GROUP BY 1 ORDER BY MIN(CASE WHEN result = '合格' THEN 1 ELSE 2 END)$q$
+               ELSE $q$SELECT CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END AS x_axis, COUNT(*)::float AS data FROM public.wholesale_pesticide_inspection GROUP BY 1 ORDER BY MIN(CASE WHEN result = '合格' THEN 1 ELSE 2 END)$q$
+        END,
         NULL,
-        'metrotaipei'
-    );
+        city_name
+    FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
 
     RAISE NOTICE '4. query_charts upserted';
 
@@ -209,50 +212,36 @@ BEGIN
     -- 5. 將兩個新組件加入 food_safety_tpe 儀表板
     --    同時補上 ntpc_food_factory（若尚未存在）
     -- ============================================================
-    SELECT id INTO v_food_dash_id
-    FROM public.dashboards WHERE index = 'food_safety_tpe' LIMIT 1;
-
-    IF v_food_dash_id IS NULL THEN
-        RAISE EXCEPTION 'food_safety_tpe dashboard not found; run add_food_safety_components.sql first';
+    -- 6. 確保儀表板歸類正確 (分區隔離)
+    -- food_safety_taipei (id=?) -> Group 2 (臺北市)
+    SELECT id INTO v_food_dash_id FROM public.dashboards WHERE index = 'food_safety_taipei' LIMIT 1;
+    IF v_food_dash_id IS NOT NULL THEN
+        DELETE FROM public.dashboard_groups WHERE dashboard_id = v_food_dash_id AND group_id IN (2, 3);
+        INSERT INTO public.dashboard_groups (dashboard_id, group_id) VALUES (v_food_dash_id, 2);
+        
+        -- 同步將新組件加入臺北儀表板
+        UPDATE public.dashboards SET components = array_append(components, v_kitchen_cid::integer)
+        WHERE id = v_food_dash_id AND NOT (components @> ARRAY[v_kitchen_cid::integer]);
+        
+        UPDATE public.dashboards SET components = array_append(components, v_pesticide_cid::integer)
+        WHERE id = v_food_dash_id AND NOT (components @> ARRAY[v_pesticide_cid::integer]);
     END IF;
 
-    -- school_kitchen_imap
-    UPDATE public.dashboards
-    SET components = array_append(components, v_kitchen_cid::integer),
-        updated_at = NOW()
-    WHERE id = v_food_dash_id
-      AND NOT (components @> ARRAY[v_kitchen_cid::integer]);
-
-    -- wholesale_pesticide_inspection
-    UPDATE public.dashboards
-    SET components = array_append(components, v_pesticide_cid::integer),
-        updated_at = NOW()
-    WHERE id = v_food_dash_id
-      AND NOT (components @> ARRAY[v_pesticide_cid::integer]);
-
-    -- ntpc_food_factory（hotfix：之前的 migration 漏掉了）
-    IF v_ntpc_fac_cid IS NOT NULL THEN
-        UPDATE public.dashboards
-        SET components = array_append(components, v_ntpc_fac_cid::integer),
-            updated_at = NOW()
-        WHERE id = v_food_dash_id
-          AND NOT (components @> ARRAY[v_ntpc_fac_cid::integer]);
+    -- food_safety_tpe (id=?) -> Group 3 (雙北)
+    SELECT id INTO v_food_dash_id FROM public.dashboards WHERE index = 'food_safety_tpe' LIMIT 1;
+    IF v_food_dash_id IS NOT NULL THEN
+        DELETE FROM public.dashboard_groups WHERE dashboard_id = v_food_dash_id AND group_id IN (2, 3);
+        INSERT INTO public.dashboard_groups (dashboard_id, group_id) VALUES (v_food_dash_id, 3);
+        
+        -- 確保雙北儀表板組件完整
+        UPDATE public.dashboards SET components = array_append(components, v_kitchen_cid::integer)
+        WHERE id = v_food_dash_id AND NOT (components @> ARRAY[v_kitchen_cid::integer]);
+        
+        UPDATE public.dashboards SET components = array_append(components, v_pesticide_cid::integer)
+        WHERE id = v_food_dash_id AND NOT (components @> ARRAY[v_pesticide_cid::integer]);
     END IF;
 
-    RAISE NOTICE '5. food_safety_tpe dashboard components updated (id=%)', v_food_dash_id;
-
-    -- ============================================================
-    -- 6. 確保 dashboard_groups 授權（taipei + metrotaipei）
-    -- ============================================================
-    INSERT INTO public.dashboard_groups (dashboard_id, group_id)
-    VALUES (v_food_dash_id, 2)
-    ON CONFLICT DO NOTHING;
-
-    INSERT INTO public.dashboard_groups (dashboard_id, group_id)
-    VALUES (v_food_dash_id, 3)
-    ON CONFLICT DO NOTHING;
-
-    RAISE NOTICE '6. dashboard_groups ensured';
+    RAISE NOTICE '6. dashboard_groups isolation ensured';
 
     -- 最終狀態確認
     RAISE NOTICE '=== Migration add_school_kitchen_wholesale_components completed ===';

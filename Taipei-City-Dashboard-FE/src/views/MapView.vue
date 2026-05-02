@@ -164,19 +164,22 @@ onBeforeUnmount(() => {
     </nav>
 
     <!-- Layer Sidebar -->
-    <MapLayerSidebar
+		<!-- Left Column: Sidebar + Analysis Panel (unified block, no overlap) -->
+		<div class="map-left-column">
+			<MapLayerSidebar
       :is-collapsed="islandCollapsed"
       @update:is-collapsed="islandCollapsed = $event"
       @switch-dashboard="handleSwitchDashboard"
 			@open-analysis="handleOpenAnalysis"
 			@close-analysis="handleCloseAnalysisByToggle"
-    />
+			/>
 
-		<MapAnalysisPanel
-	  v-if="selectedAnalysisComponent"
-	  :component="selectedAnalysisComponent"
-	  @close="handleCloseAnalysis"
-	/>
+			<MapAnalysisPanel
+				v-if="selectedAnalysisComponent"
+				:component="selectedAnalysisComponent"
+				@close="handleCloseAnalysis"
+			/>
+		</div>
 
     <!-- Dialogs -->
     <MoreInfo />
@@ -263,6 +266,24 @@ onBeforeUnmount(() => {
 	color: #ffffff;
 	font-weight: 600;
 	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.map-left-column {
+	position: absolute;
+	top: 68px;
+	left: 12px;
+	bottom: 12px;
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: flex-start;
+	pointer-events: none;
+	overflow: visible;
+
+	> * {
+		pointer-events: auto;
+	}
 }
 
 </style>

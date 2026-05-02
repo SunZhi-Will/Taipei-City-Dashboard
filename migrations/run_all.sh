@@ -25,7 +25,7 @@ run_sql() {
   local label="$2"
   echo
   echo "===== $label ====="
-  docker exec -i -e "PGPASSWORD=$PGPASSWORD" "$CONTAINER" psql -U "$PG_USER" -d "$DATABASE" < "$file"
+  docker exec -i -e "PGPASSWORD=$PGPASSWORD" "$CONTAINER" psql -v ON_ERROR_STOP=1 -U "$PG_USER" -d "$DATABASE" < "$file"
 }
 
 run_sql_data() {
@@ -33,7 +33,7 @@ run_sql_data() {
   local label="$2"
   echo
   echo "===== $label ====="
-  docker exec -i -e "PGPASSWORD=$PGPASSWORD" "postgres-data" psql -U "$PG_USER" -d "dashboard" < "$file"
+  docker exec -i -e "PGPASSWORD=$PGPASSWORD" "postgres-data" psql -v ON_ERROR_STOP=1 -U "$PG_USER" -d "dashboard" < "$file"
 }
 
 # ====== 執行前安全提醒 ======
@@ -57,6 +57,7 @@ run_sql "attach_to_dashboard_air_station_map.sql" "Step 3：掛到 dashboard [$D
 run_sql_data "add_food_safety_data_tables.sql"   "Step 4a：食安資料表 + mock（postgres-data/dashboard）"
 run_sql "add_food_safety_components.sql"          "Step 4b：食安月報儀表板 metadata（dashboardmanager）"
 run_sql "add_school_kitchen_wholesale_components.sql" "Step 5：學校廚房 + 農藥殘留地圖（2 組件）"
+run_sql "fix_food_safety_zero_chart_queries.sql"  "Step 6：修正食安圖表 0 值查詢"
 
 echo
 echo "✅ 全部完成！重整瀏覽器看地圖"

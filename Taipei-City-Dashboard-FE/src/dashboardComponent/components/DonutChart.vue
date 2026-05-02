@@ -1,7 +1,7 @@
 <!-- Developed by Taipei Urban Intelligence Center 2023-2024-->
 
 <script setup>
-import { computed, ref, onUnmounted } from "vue";
+import { computed, ref, onUnmounted, watch } from "vue";
 import VueApexCharts from "vue3-apexcharts";
 import { useTimeStore } from "../../store/timeStore";
 import { useMapStore } from "../../store/mapStore";
@@ -42,29 +42,25 @@ const getX = (item, idx) =>
 
 // --- GeoJSON-based live counts via pre-computed monthResultCounts ---
 const mapSyncIndex = computed(() => props.map_config?.[0]?.index ?? null);
+const isMapLinkedMode = computed(() => Boolean(props.map_filter_on && mapSyncIndex.value));
 
 const GEO_LABELS = ["合格", "正在複查", "不合格"];
 
 const geoRawData = computed(() => {
+	if (!isMapLinkedMode.value) return null;
 	const idx = mapSyncIndex.value;
 	if (!idx) return null;
 	const allCounts = timeStore.monthResultCounts[idx];
 	if (!allCounts) return null;
 
 	const month = timeStore.selectedMonth;
-	if (month) {
-		const mc = allCounts[month];
-		if (!mc) return [0, 0, 0];
-		return [mc["合格"] ?? 0, mc["正在複查"] ?? 0, mc["不合格"] ?? 0];
-	}
-	// No month selected: aggregate all months
-	const total = [0, 0, 0];
-	for (const mc of Object.values(allCounts)) {
-		total[0] += mc["合格"] ?? 0;
-		total[1] += mc["正在複查"] ?? 0;
-		total[2] += mc["不合格"] ?? 0;
-	}
-	return total;
+	// Only enter GeoJSON mode when a specific month is actively selected
+	// (animation playing or slider dragged). When null, fall back to props.series
+	// so the map-open view shows the same aggregate numbers as the card view.
+	if (!month) return null;
+	const mc = allCounts[month];
+	if (!mc) return [0, 0, 0];
+	return [mc["合格"] ?? 0, mc["正在複查"] ?? 0, mc["不合格"] ?? 0];
 });
 
 // Filter out zero-value categories (e.g. 正在複查 not present in wholesale)
@@ -86,10 +82,12 @@ const geoFiltered = computed(() => {
 // --- Animation controls (shown when GeoJSON has monthly snapshots) ---
 // availableMonths: newest→oldest (from store); sliderMonths: oldest→newest (left→right)
 const availableMonths = computed(() =>
-	mapSyncIndex.value ? timeStore.getAvailableMonths(mapSyncIndex.value) : []
+	isMapLinkedMode.value ? timeStore.getAvailableMonths(mapSyncIndex.value) : []
 );
 const sliderMonths = computed(() => [...availableMonths.value].reverse());
-const showAnimControls = computed(() => availableMonths.value.length > 1);
+const showAnimControls = computed(
+	() => props.activeChart === "AnimatedColumnChart" && availableMonths.value.length > 1,
+);
 const isPlaying    = ref(false);
 const currentMonth = computed(() => timeStore.selectedMonth ?? availableMonths.value[0] ?? null);
 
@@ -108,7 +106,7 @@ function formatMonthLabel(ym) {
 }
 
 function togglePlay() {
-	if (!mapSyncIndex.value) return;
+	if (!isMapLinkedMode.value) return;
 	if (isPlaying.value) {
 		mapStore.stopMonthAnimation();
 		isPlaying.value = false;
@@ -121,7 +119,7 @@ function togglePlay() {
 function onSliderInput(e) {
 	const idx   = parseInt(e.target.value);
 	const month = sliderMonths.value[idx];
-	if (!month || !mapSyncIndex.value) return;
+	if (!month || !isMapLinkedMode.value) return;
 	// Stop playback when user manually drags
 	if (isPlaying.value) {
 		mapStore.stopMonthAnimation();
@@ -133,6 +131,16 @@ function onSliderInput(e) {
 onUnmounted(() => {
 	if (isPlaying.value) mapStore.stopMonthAnimation();
 });
+
+watch(
+	() => props.map_filter_on,
+	(isMapMode) => {
+		if (!isMapMode && isPlaying.value) {
+			mapStore.stopMonthAnimation();
+			isPlaying.value = false;
+		}
+	},
+);
 
 // --- Parse series from API (fallback when no map link) ---
 const parsedSeries = computed(() => {
@@ -399,6 +407,7 @@ function handleDataSelection(_e, _chartContext, config) {
 		}
 
 		.material-icons-round {
+			font-family: var(--font-icon);
 			font-size: 18px;
 			line-height: 1;
 		}

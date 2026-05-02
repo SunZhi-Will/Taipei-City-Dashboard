@@ -130,6 +130,7 @@ export const useChatStore = defineStore('chat', () => {
 							components.length > 0 ? 'components' : 'web',
 						),
 						components: components.length > 0 ? components : undefined,
+						suggestedTags: twaiResult.suggestedTags,
 					});
 
 					saveChatLog(newChatData.content, finalContent, {

@@ -93,6 +93,7 @@ export const useMapStore = defineStore("map", {
 		maxIsolineSegments: 30000,
 		// Store the user's current location,
 		userLocation: { latitude: null, longitude: null },
+		geolocationDeniedLogged: false,
 		// 3D Mrt Map 相關參數
 		// 模型及圖徵是否預載中
 		isPreloading: true,
@@ -112,7 +113,7 @@ export const useMapStore = defineStore("map", {
 	actions: {
 		/* Initialize Mapbox */
 		// 1. Creates the mapbox instance and passes in initial configs
-		initializeMapBox() {
+		async initializeMapBox() {
 			if (this.map) {
 				this.map.remove();
 			}
@@ -128,14 +129,7 @@ export const useMapStore = defineStore("map", {
 				style: mapStyle,
 			});
 			this.marker = new mapboxGl.Marker();
-			const geoLocate = new mapboxGl.GeolocateControl({
-				positionOptions: {
-					enableHighAccuracy: true,
-				},
-				trackUserLocation: true,
-				showUserHeading: true,
-			});
-			this.map.addControl(geoLocate);
+			const geoLocate = await this.addGeolocateControl();
 			this.map.addControl(new mapboxGl.NavigationControl());
 			this.map.doubleClickZoom.disable();
 			let isFirstZoom = true;
@@ -179,12 +173,14 @@ export const useMapStore = defineStore("map", {
 			this.renderMarkers();
 
 			// 使用者點擊定位功能後觸發GA自訂事件
-			geoLocate.on("geolocate", () => {
-				gtag("event", "map_actions", {
-					action_type: "所在位置定位",
-					time: Date.now(),
+			if (geoLocate) {
+				geoLocate.on("geolocate", () => {
+					gtag("event", "map_actions", {
+						action_type: "所在位置定位",
+						time: Date.now(),
+					});
 				});
-			});
+			}
 
 			return geoLocate;
 		},
@@ -267,23 +263,31 @@ export const useMapStore = defineStore("map", {
 			// Taipei 3D Buildings
 			if (!authStore.isMobileDevice && import.meta.env.VITE_MAPBOXTILE) {
 				try {
+					const disableTaipeiBuildings = (message) => {
+						if (this.map?.getLayer("taipei_building_3d")) {
+							this.map.removeLayer("taipei_building_3d");
+						}
+						if (this.map?.getSource("taipei_building_3d_source")) {
+							this.map.removeSource("taipei_building_3d_source");
+						}
+						console.warn("taipei_building_3d: 3D buildings disabled.", message);
+					};
+					const handleTaipeiBuildingError = (e) => {
+						if (
+							e?.error?.message?.includes("taipei_building_3d") ||
+							e?.error?.message?.includes("taipei_building_3d_source")
+						) {
+							this.map?.off("error", handleTaipeiBuildingError);
+							disableTaipeiBuildings(e.error.message);
+						}
+					};
 					this.map
 						.addSource("taipei_building_3d_source", {
 							type: "vector",
 							url: import.meta.env.VITE_MAPBOXTILE,
 						})
 						.addLayer(TaipeiBuilding);
-					// Mapbox fires source-layer validation errors via the event system rather
-					// than throwing synchronously. Suppress them to avoid console noise when
-					// the tileset does not expose the expected source layer.
-					this.map.on("error", (e) => {
-						if (
-							e?.error?.message?.includes("taipei_building_3d") ||
-							e?.error?.message?.includes("taipei_building_3d_source")
-						) {
-							console.warn("taipei_building_3d: source layer not found, 3D buildings disabled.", e.error.message);
-						}
-					});
+					this.map.on("error", handleTaipeiBuildingError);
 				} catch (e) {
 					console.warn("taipei_building_3d: failed to add 3D building source/layer", e);
 				}
@@ -418,6 +422,40 @@ export const useMapStore = defineStore("map", {
 			// }
 		},
 		// 6. Set User Location
+		async addGeolocateControl() {
+			if (!("geolocation" in navigator)) {
+				return;
+			}
+
+			if (navigator.permissions?.query) {
+				try {
+					const permissionStatus = await navigator.permissions.query({
+						name: "geolocation",
+					});
+					if (permissionStatus.state === "denied") {
+						this.geolocationDeniedLogged = true;
+						console.warn("Geolocation permission denied; current-location control disabled.");
+						return;
+					}
+				} catch {
+					// Ignore permission API failures and let the browser decide.
+				}
+			}
+
+			if (!this.map) {
+				return;
+			}
+
+			const geoLocate = new mapboxGl.GeolocateControl({
+				positionOptions: {
+					enableHighAccuracy: true,
+				},
+				trackUserLocation: true,
+				showUserHeading: true,
+			});
+			this.map.addControl(geoLocate);
+			return geoLocate;
+		},
 		setCurrentLocation() {
 			if (navigator.geolocation) {
 				navigator.geolocation.getCurrentPosition(
@@ -428,11 +466,18 @@ export const useMapStore = defineStore("map", {
 						};
 					},
 					(error) => {
-						console.error(error.message);
+						if (error?.code === error.PERMISSION_DENIED) {
+							if (!this.geolocationDeniedLogged) {
+								console.warn("Geolocation permission denied; current-location features disabled.");
+								this.geolocationDeniedLogged = true;
+							}
+							return;
+						}
+						console.warn(error.message);
 					},
 				);
 			} else {
-				console.error("Geolocation is not supported by this browser.");
+				console.warn("Geolocation is not supported by this browser.");
 			}
 		},
 
@@ -497,7 +542,9 @@ export const useMapStore = defineStore("map", {
 
 						const months = timeStore.getAvailableMonths(map_config.index);
 						if (months.length > 0) {
-							timeStore.setMonth(months[0]);
+							// Do NOT set selectedMonth here; keep it null so DonutChart
+							// shows the full-period aggregate (same as card view).
+							// Animation / slider will call setMonth() when user interacts.
 							this.map.once("idle", () => {
 								if (this.map?.getLayer(map_config.layerId)) {
 									this.map.setFilter(map_config.layerId, [

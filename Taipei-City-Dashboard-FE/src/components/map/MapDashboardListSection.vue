@@ -1,9 +1,4 @@
 <script setup>
-import DashboardComponent from "../../dashboardComponent/DashboardComponent.vue";
-import { useContentStore } from "../../store/contentStore";
-
-const contentStore = useContentStore();
-
 const props = defineProps({
 	dashboards: {
 		type: Array,
@@ -51,28 +46,18 @@ const emit = defineEmits([
 	"dashboard-click",
 	"component-toggle",
 	"component-analyze",
-	"component-city-change",
 ]);
 
 const handleDashboardClick = (dashboard) => {
 	emit("dashboard-click", { scope: props.scope, dashboard, city: props.city });
 };
 
-const handleToggle = ({ checked, dashboard, city, component }) => {
+const handleComponentToggle = (event, dashboard, component) => {
 	emit("component-toggle", {
-		checked,
+		checked: event.target.checked,
 		dashboard,
-		city,
+		city: props.city,
 		component,
-	});
-};
-
-const handleComponentCityChange = ({ dashboard, city, component, nextCity }) => {
-	emit("component-city-change", {
-		dashboard,
-		city,
-		component,
-		nextCity,
 	});
 };
 
@@ -111,33 +96,24 @@ const handleAnalyzeClick = (dashboard, component) => {
           :key="component.id"
           class="map-component-item"
         >
-					<DashboardComponent
-						:config="component"
-						mode="map"
-						:show-index="false"
-						:select-btn="true"
-						:select-btn-disabled="contentStore.cityManager.getSelectList(component.city).length === 1"
-						:select-btn-list="contentStore.cityManager.getSelectList(component.city)"
-						:city-tag="contentStore.cityManager.getTagList(component.city)"
-						:active-city="component.city"
-						:toggle-on="componentToggles[getComponentKey(dashboard, city, component)] || false"
-						:favorite-btn="false"
-						:delete-btn="false"
-						:fullscreen-btn="false"
-						@toggle="(checked) => handleToggle({ checked, dashboard, city, component })"
-						@change-city="(nextCity) => handleComponentCityChange({ dashboard, city, component, nextCity })"
-					/>
-					<div class="map-component-item-actions">
-						<small v-if="!hasMapConfig(component)">無地圖</small>
-						<button
-							class="map-component-analyze"
-							type="button"
+          <label class="map-component-item-main">
+            <input
+              :checked="componentToggles[getComponentKey(dashboard, city, component)] || false"
+              type="checkbox"
 							:disabled="!hasMapConfig(component)"
-							@click="handleAnalyzeClick(dashboard, component)"
-						>
-							分析
-						</button>
-					</div>
+              @change="handleComponentToggle($event, dashboard, component)"
+            >
+            <span>{{ component.name }}</span>
+            <small v-if="!hasMapConfig(component)">無地圖</small>
+          </label>
+          <button
+						class="map-component-open"
+            type="button"
+						title="開啟分析"
+            @click="handleAnalyzeClick(dashboard, component)"
+          >
+						<span class="material-icons-round">open_in_new</span>
+          </button>
         </div>
       </div>
     </div>
@@ -147,8 +123,8 @@ const handleAnalyzeClick = (dashboard, component) => {
 <style scoped lang="scss">
 .map-component-item {
 	display: flex;
-	flex-direction: column;
-	align-items: stretch;
+	align-items: center;
+	justify-content: space-between;
 	gap: 6px;
 	padding: 4px;
 	margin-bottom: 4px;
@@ -159,49 +135,64 @@ const handleAnalyzeClick = (dashboard, component) => {
 	}
 }
 
-.map-component-list :deep(.dashboardcomponent.mapclosed),
-.map-component-list :deep(.dashboardcomponent.mapopen) {
-	width: 100%;
-	margin: 4px 0;
-	box-sizing: border-box;
-}
-
-.map-component-list :deep(.dashboardcomponent-header) {
-	gap: 8px;
-}
-
-.map-component-item-actions {
+.map-component-item-main {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	min-height: 22px;
+	flex: 1;
+	min-width: 0;
+	color: #b7bcc3;
+	font-size: 0.8rem;
+	cursor: pointer;
+
+	input {
+		width: 16px;
+		height: 16px;
+		margin-right: 6px;
+		cursor: pointer;
+		flex-shrink: 0;
+
+		&:disabled {
+			opacity: 0.4;
+			cursor: not-allowed;
+		}
+	}
+
+	span {
+		flex: 1;
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
 
 	small {
 		font-size: 0.7rem;
 		color: #8b92a8;
+		margin-left: 4px;
 		flex-shrink: 0;
 	}
 }
 
-.map-component-analyze {
-	height: 22px;
-	padding: 0 8px;
+.map-component-open {
+	width: 24px;
+	height: 24px;
+	padding: 0;
 	border: 1px solid rgba(255, 255, 255, 0.2);
-	border-radius: 999px;
+	border-radius: 50%;
 	background: rgba(255, 255, 255, 0.08);
 	color: #e8eaed;
-	font-size: 0.7rem;
-	line-height: 1;
 	cursor: pointer;
-	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 
-	&:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.16);
+	span {
+		font-size: 14px;
+		line-height: 1;
 	}
 
-	&:disabled {
-		opacity: 0.45;
-		cursor: not-allowed;
+	&:hover {
+		background: rgba(255, 255, 255, 0.16);
 	}
 }
 </style>

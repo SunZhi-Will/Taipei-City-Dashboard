@@ -44,17 +44,22 @@ if errorlevel 1 goto :error
 
 echo.
 echo ===== Step 4: 建立食安資料表與 mock 資料 =====
-docker exec -i -e PGPASSWORD=%PGPASSWORD% %DATA_CONTAINER% psql -U %PG_USER% -d %DATA_DATABASE% < add_food_safety_data_tables.sql
+docker exec -i -e PGPASSWORD=%PGPASSWORD% %DATA_CONTAINER% psql -v ON_ERROR_STOP=1 -U %PG_USER% -d %DATA_DATABASE% < add_food_safety_data_tables.sql
 if errorlevel 1 goto :error
 
 echo.
 echo ===== Step 5: 建立食安組件 metadata =====
-docker exec -i -e PGPASSWORD=%PGPASSWORD% %MANAGER_CONTAINER% psql -U %PG_USER% -d %MANAGER_DATABASE% < add_food_safety_components.sql
+docker exec -i -e PGPASSWORD=%PGPASSWORD% %MANAGER_CONTAINER% psql -v ON_ERROR_STOP=1 -U %PG_USER% -d %MANAGER_DATABASE% < add_food_safety_components.sql
 if errorlevel 1 goto :error
 
 echo.
 echo ===== Step 6: 學校廚房 + 農藥殘留地圖 =====
-docker exec -i -e PGPASSWORD=%PGPASSWORD% %MANAGER_CONTAINER% psql -U %PG_USER% -d %MANAGER_DATABASE% < add_school_kitchen_wholesale_components.sql
+docker exec -i -e PGPASSWORD=%PGPASSWORD% %MANAGER_CONTAINER% psql -v ON_ERROR_STOP=1 -U %PG_USER% -d %MANAGER_DATABASE% < add_school_kitchen_wholesale_components.sql
+if errorlevel 1 goto :error
+
+echo.
+echo ===== Step 7: 修正食安圖表 0 值查詢 =====
+docker exec -i -e PGPASSWORD=%PGPASSWORD% %MANAGER_CONTAINER% psql -v ON_ERROR_STOP=1 -U %PG_USER% -d %MANAGER_DATABASE% < fix_food_safety_zero_chart_queries.sql
 if errorlevel 1 goto :error
 
 echo.

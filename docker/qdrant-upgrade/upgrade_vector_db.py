@@ -41,7 +41,8 @@ def main():
 			INNER JOIN components c ON qc.index = c.index
 			where id in (select distinct unnest(components) from dashboards d where id
 			in (select distinct dashboard_id  from dashboard_groups dg where group_id  in (select distinct id from "groups" g where is_personal is false))
-			)
+            )
+            and qc.index <> 'ntpc_food_factory'
     """
     
     print("執行 SQL 查詢並讀取資料...")

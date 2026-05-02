@@ -80,6 +80,22 @@
         "panel": "shared"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "sync:team-data",
+      "type": "shell",
+      "shell": {
+        "executable": "bash",
+        "args": ["-c"]
+      },
+      "command": ".vscode/scripts/team-sync.sh",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      },
+      "problemMatcher": []
     }
   ]
 }

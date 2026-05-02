@@ -96,34 +96,64 @@ const TALL_CHART_TYPES = new Set([
 
 const DASHBOARD_LAYOUT_PROFILES = {
   food_safety_tpe: {
-    taipei_imap_food: "",
     food_poisoning_food: (activeChart) =>
       activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
     food_poisoning_cause: (activeChart) =>
       activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
-    ntpc_food_factory: "",
-    food_poisoning_trend: "dashboard-tile--wide",
-    food_poisoning_place: "dashboard-tile--tall",
-    wholesale_pesticide_inspection: "",
-    school_kitchen_imap: "",
+    food_poisoning_trend: (activeChart) =>
+      activeChart === "AnimatedColumnChart" ? "dashboard-tile--wide-tall" : "dashboard-tile--wide",
+    food_poisoning_place: (activeChart) =>
+      activeChart === "BarChart" ? "dashboard-tile--tall" : "",
   },
   food_safety_taipei: {
-    taipei_imap_food: "",
     food_poisoning_food: (activeChart) =>
       activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
     food_poisoning_cause: (activeChart) =>
       activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
-    food_poisoning_trend: "dashboard-tile--wide",
-    food_poisoning_place: "dashboard-tile--tall",
-    wholesale_pesticide_inspection_taipei: "",
-    school_kitchen_imap: "",
+    food_poisoning_trend: (activeChart) =>
+      activeChart === "AnimatedColumnChart" ? "dashboard-tile--wide-tall" : "dashboard-tile--wide",
+    food_poisoning_place: (activeChart) =>
+      activeChart === "BarChart" ? "dashboard-tile--tall" : "",
   },
 };
 
-function getTileClass(item, index) {
+const DASHBOARD_DEFAULT_CHART_TYPES = {
+  food_safety_tpe: {
+    taipei_imap_food: "DonutChart",
+    food_poisoning_cause: "BarChart",
+    food_poisoning_food: "DonutChart",
+    food_poisoning_place: "BarChart",
+    food_poisoning_trend: "TimelineSeparateChart",
+    wholesale_pesticide_inspection: "BarChart",
+  },
+  food_safety_taipei: {
+    taipei_imap_food: "DonutChart",
+    food_poisoning_cause: "BarChart",
+    food_poisoning_food: "DonutChart",
+    food_poisoning_place: "BarChart",
+    food_poisoning_trend: "TimelineSeparateChart",
+    wholesale_pesticide_inspection: "BarChart",
+  },
+};
+
+function getPreferredInitialChartType(component) {
+  const dashboardIndex = contentStore.currentDashboard?.index;
+  const preferredType = DASHBOARD_DEFAULT_CHART_TYPES[dashboardIndex]?.[component?.index];
+  const availableTypes = component?.chart_config?.types || [];
+  if (preferredType && availableTypes.includes(preferredType)) {
+    return preferredType;
+  }
+  return availableTypes[0] || "";
+}
+
+function getTileClass(item) {
   const dashboardIndex = contentStore.currentDashboard?.index;
   const activeChart = componentActiveCharts.value[item?.id] || item?.chart_config?.types?.[0] || "";
   const profileClass = DASHBOARD_LAYOUT_PROFILES[dashboardIndex]?.[item?.index];
+  const chartTypes = item?.chart_config?.types || [];
+  const hasMultiChartTypes = chartTypes.length > 1;
+  const hasWideActiveChart = WIDE_CHART_TYPES.has(activeChart);
+  const hasTallActiveChart = TALL_CHART_TYPES.has(activeChart);
 
   if (profileClass !== undefined) {
 	return typeof profileClass === "function"
@@ -131,13 +161,7 @@ function getTileClass(item, index) {
 	  : profileClass;
   }
 
-  const chartTypes = item?.chart_config?.types || [];
-  const hasDenseSeries = Array.isArray(item?.chart_data) && item.chart_data.length >= 12;
-  const hasMultiChartTypes = chartTypes.length > 1;
-  const hasWideChartType = WIDE_CHART_TYPES.has(activeChart);
-	const hasTallActiveChart = TALL_CHART_TYPES.has(activeChart);
-
-  if (hasMultiChartTypes && hasWideChartType) {
+  if (hasMultiChartTypes && hasWideActiveChart) {
     return "dashboard-tile--wide-tall";
   }
 
@@ -145,14 +169,16 @@ function getTileClass(item, index) {
     return "dashboard-tile--x-tall";
   }
 
-  if (hasWideChartType) {
+  if (hasMultiChartTypes) {
+    return "";
+  }
+
+  if (hasWideActiveChart) {
     return "dashboard-tile--wide";
   }
 
   if (
-    hasDenseSeries ||
-    hasTallActiveChart ||
-    (index + 1) % 6 === 0
+    hasTallActiveChart
   ) {
     return "dashboard-tile--tall";
   }
@@ -174,6 +200,22 @@ function handleChartTypeChange(componentId, chartType) {
 		[componentId]: chartType,
 	};
 }
+
+watch(
+  () => contentStore.currentDashboard.components,
+  (components) => {
+    if (!Array.isArray(components)) return;
+    const nextCache = {};
+    components.forEach((component) => {
+      nextCache[component.id] = getPreferredInitialChartType(component);
+    });
+    componentActiveCharts.value = {
+      ...nextCache,
+      ...componentActiveCharts.value,
+    };
+  },
+  { immediate: true, deep: true }
+);
 
 function handleOpenSettings() {
 	contentStore.editDashboard = JSON.parse(
@@ -229,6 +271,7 @@ function handleMoreInfo(item) {
     <DashboardComponent
       :config="expandedComponent"
       mode="focus"
+      :initial-chart-type="componentActiveCharts[expandedComponent.id] || getPreferredInitialChartType(expandedComponent)"
       :info-btn="true"
       :expanded-in-content="true"
       :active-city="expandedComponent.city"
@@ -268,6 +311,7 @@ function handleMoreInfo(item) {
       <DashboardComponent
         :config="item"
         mode="half"
+        :initial-chart-type="componentActiveCharts[item.id] || getPreferredInitialChartType(item)"
         :style="getTileComponentStyle()"
         :info-btn="true"
         :active-city="item.city"
@@ -322,6 +366,7 @@ function handleMoreInfo(item) {
     >
       <DashboardComponent
         :config="item"
+        :initial-chart-type="componentActiveCharts[item.id] || getPreferredInitialChartType(item)"
         :style="getTileComponentStyle()"
         :info-btn="true"
         :active-city="item.city"
@@ -438,6 +483,7 @@ function handleMoreInfo(item) {
     min-width: 0;
     grid-column: span 1;
     grid-row: span 2;
+    transition: all 0.24s ease;
 
     :deep(.dashboardcomponent-fullscreen-container) {
       height: 100%;
