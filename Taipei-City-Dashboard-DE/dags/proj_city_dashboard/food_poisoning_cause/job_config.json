@@ -1,0 +1,37 @@
+{
+    "dag_infos": {
+        "dag_id": "food_poisoning_cause",
+        "start_date": "2025-01-01",
+        "schedule_interval": "0 2 1 1 *",
+        "catchup": false,
+        "tags": ["food_safety", "食藥署", "食物中毒", "taipei"],
+        "description": "Food poisoning cases by pathogenic agent from FDA Taiwan.",
+        "default_args": {
+            "owner": "airflow",
+            "email": ["DEFAULT_EMAIL_LIST"],
+            "email_on_retry": false,
+            "email_on_failure": true,
+            "retries": 1,
+            "retry_delay": 60
+        },
+        "ready_data_db": "postgres_default",
+        "ready_data_default_table": "food_poisoning_cause",
+        "ready_data_history_table": "",
+        "raw_data_db": "postgres_default",
+        "raw_data_table": "",
+        "load_behavior": "replace"
+    },
+    "data_infos": {
+        "name_cn": "食品中毒案件病因物質案件數統計",
+        "airflow_update_freq": "02:00 1st Jan every year",
+        "source": "https://data.gov.tw/dataset/9836",
+        "source_type": "fda api",
+        "source_dept": "衛福部食品藥物管理署",
+        "gis_format": null,
+        "output_coordinate": null,
+        "is_geometry": 0,
+        "dataset_description": "歷年食品中毒案件依病因物質（細菌/化學/天然毒/諾羅病毒等）分類統計",
+        "etl_description": "fetch FDA API, melt cause columns to rows, filter recent years",
+        "sensitivity": "public"
+    }
+}

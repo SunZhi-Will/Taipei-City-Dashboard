@@ -25,6 +25,7 @@ import { point, distance } from "@turf/turf";
 // Other Stores
 import { useAuthStore } from "./authStore";
 import { useDialogStore } from "./dialogStore";
+import { useTimeStore } from "./timeStore";
 
 // Vue Components
 import MapPopup from "../components/map/MapPopup.vue";
@@ -103,11 +104,18 @@ export const useMapStore = defineStore("map", {
 		layerUpdateTime: {
 			// [layerId]: Date
 		},
+		// setInterval handle for month animation
+		monthInterval: null,
+		// interval (ms) for month animation, settable via property._animate
+		monthAnimateIntervalMs: 1500,
 	}),
 	actions: {
 		/* Initialize Mapbox */
 		// 1. Creates the mapbox instance and passes in initial configs
 		initializeMapBox() {
+			if (this.map) {
+				this.map.remove();
+			}
 			this.map = null;
 			this.marker = null;
 			this.overlay = null;
@@ -472,6 +480,33 @@ export const useMapStore = defineStore("map", {
 			axios
 				.get(`/mapData/${map_config.index}.geojson`)
 				.then((rs) => {
+					const meta = rs.data?.metadata;
+					const animateProp = Array.isArray(map_config.property)
+						? map_config.property.find((p) => p._animate)
+						: null;
+					const isMonthly = !!animateProp ||
+						meta?.type === "monthly_flat" ||
+						rs.data?.features?.some((f) => f.properties?.month);
+
+					if (isMonthly) {
+						if (animateProp?.interval_ms) {
+							this.monthAnimateIntervalMs = animateProp.interval_ms;
+						}
+						const timeStore = useTimeStore();
+						timeStore.cacheGeojson(map_config.index, rs.data);
+
+						const months = timeStore.getAvailableMonths(map_config.index);
+						if (months.length > 0) {
+							timeStore.setMonth(months[0]);
+							this.map.once("idle", () => {
+								if (this.map?.getLayer(map_config.layerId)) {
+									this.map.setFilter(map_config.layerId, [
+										"==", ["get", "month"], months[0],
+									]);
+								}
+							});
+						}
+					}
 					this.localGeoJsonCache[map_config.index] = rs.data;
 					this.addGeojsonSource(map_config, rs.data);
 				})
@@ -512,6 +547,53 @@ export const useMapStore = defineStore("map", {
 			if (zoom >= 14) return 0.0015;
 			if (zoom >= 12) return 0.002;
 			return 0.003;
+		// Animate through months (monthly_flat: setFilter only)
+		animateMonths(index, intervalMs = 1500) {
+			this.stopMonthAnimation();
+			const timeStore = useTimeStore();
+			// getAvailableMonths returns newest→oldest; reverse to play oldest→newest
+			const months = [...timeStore.getAvailableMonths(index)].reverse();
+			if (!months.length) return;
+
+			const layerIds = this.currentLayers.filter((id) => id.startsWith(index));
+			if (!layerIds.length) return;
+
+			let i = 0;
+
+			const applyMonth = (month) => {
+				timeStore.setMonth(month);
+				for (const layerId of layerIds) {
+					if (this.map?.getLayer(layerId)) {
+						this.map.setFilter(layerId, ["==", ["get", "month"], month]);
+					}
+				}
+			};
+
+			applyMonth(months[i]);
+
+			this.monthInterval = setInterval(() => {
+				i = (i + 1) % months.length;
+				applyMonth(months[i]);
+			}, intervalMs);
+		},
+		// Stop month animation and clear interval
+		stopMonthAnimation() {
+			if (this.monthInterval) {
+				clearInterval(this.monthInterval);
+				this.monthInterval = null;
+			}
+		},
+		// Manually jump to a specific month (stops animation first)
+		setMapMonth(index, month) {
+			this.stopMonthAnimation();
+			const timeStore = useTimeStore();
+			timeStore.setMonth(month);
+			const layerIds = this.currentLayers.filter((id) => id.startsWith(index));
+			for (const layerId of layerIds) {
+				if (this.map?.getLayer(layerId)) {
+					this.map.setFilter(layerId, ["==", ["get", "month"], month]);
+				}
+			}
 		},
 		// 3-1. Add a local geojson as a source in mapbox
 		addGeojsonSource(map_config, data) {
@@ -1543,7 +1625,7 @@ export const useMapStore = defineStore("map", {
 						// 清空 tooltip 內容
 						customLayer.tooltipContent.innerHTML = "";
 						const infoContainer = document.createElement("div");
-						const fields = map_config.property.map((prop) => ({
+						const fields = map_config.property.filter((prop) => !prop._animate).map((prop) => ({
 							label: prop.name,
 							value: prop.name.includes("擁擠度")
 								? getCrowdColor(closestCar[prop.key])

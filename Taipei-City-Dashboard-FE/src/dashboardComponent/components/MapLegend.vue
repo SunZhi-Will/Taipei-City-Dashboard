@@ -1,7 +1,9 @@
 <!-- Developed by Taipei Urban Intelligence Center 2023-2024-->
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed, onUnmounted } from "vue";
+import { useMapStore } from "../../store/mapStore";
+import { useTimeStore } from "../../store/timeStore";
 import bus from "../assets/map/bus.png";
 import metro from "../assets/map/metro.png";
 import triangle_green from "../assets/map/triangle_green.png";
@@ -28,6 +30,61 @@ const emits = defineEmits([
 	"clearByLayerFilter",
 	"fly"
 ]);
+
+const mapStore  = useMapStore();
+const timeStore = useTimeStore();
+
+const mapSyncIndex = computed(() => props.map_config?.[0]?.index ?? null);
+
+const availableMonths = computed(() =>
+	mapSyncIndex.value ? timeStore.getAvailableMonths(mapSyncIndex.value) : [],
+);
+
+const showAnimControls = computed(() => availableMonths.value.length > 1);
+// sliderMonths: oldest→newest (left→right on slider)
+const sliderMonths = computed(() => [...availableMonths.value].reverse());
+
+const isPlaying    = ref(false);
+const currentMonth = computed(() => timeStore.selectedMonth ?? availableMonths.value[0] ?? null);
+
+const sliderIdx = computed(() => {
+	const m = currentMonth.value;
+	if (!m) return sliderMonths.value.length - 1;
+	const idx = sliderMonths.value.indexOf(m);
+	return idx >= 0 ? idx : sliderMonths.value.length - 1;
+});
+
+function formatMonthLabel(ym) {
+	if (!ym) return "最新";
+	const [y, m] = ym.split("-");
+	return `${y} 年 ${parseInt(m, 10)} 月`;
+}
+
+function togglePlay() {
+	if (!mapSyncIndex.value) return;
+	if (isPlaying.value) {
+		mapStore.stopMonthAnimation();
+		isPlaying.value = false;
+	} else {
+		mapStore.animateMonths(mapSyncIndex.value, 1500);
+		isPlaying.value = true;
+	}
+}
+
+function onSliderInput(e) {
+	const idx   = parseInt(e.target.value);
+	const month = sliderMonths.value[idx];
+	if (!month || !mapSyncIndex.value) return;
+	if (isPlaying.value) {
+		mapStore.stopMonthAnimation();
+		isPlaying.value = false;
+	}
+	mapStore.setMapMonth(mapSyncIndex.value, month);
+}
+
+onUnmounted(() => {
+	if (isPlaying.value) mapStore.stopMonthAnimation();
+});
 
 function returnIcon(name) {
 	switch (name) {
@@ -93,6 +150,30 @@ function handleDataSelection(index) {
 
 <template>
   <div class="maplegend">
+    <!-- 月份動畫控制：時間上下兩排 -->
+    <div
+      v-if="showAnimControls"
+      class="maplegend-anim"
+    >
+      <span class="maplegend-anim-month">{{ formatMonthLabel(currentMonth) }}</span>
+      <div class="maplegend-anim-bar">
+        <button
+          class="maplegend-anim-btn"
+          :title="isPlaying ? '暫停' : '播放'"
+          @click="togglePlay"
+        >
+          <span class="material-icons">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
+        </button>
+        <input
+          type="range"
+          class="maplegend-anim-slider"
+          :min="0"
+          :max="sliderMonths.length - 1"
+          :value="sliderIdx"
+          @input="onSliderInput"
+        >
+      </div>
+    </div>
     <div class="maplegend-legend">
       <button
         v-for="(item, index) in series"
@@ -100,12 +181,10 @@ function handleDataSelection(index) {
         :class="{
           'maplegend-legend-item': true,
           'maplegend-filter': map_filter_on && map_filter,
-          'maplegend-selected':
-            map_filter_on && selectedIndex === index,
+          'maplegend-selected': map_filter_on && selectedIndex === index,
         }"
         @click="handleDataSelection(index)"
       >
-        <!-- Show different icons for different map types -->
         <div
           v-if="item.type !== 'symbol'"
           :style="{
@@ -118,7 +197,6 @@ function handleDataSelection(index) {
           v-else
           :src="returnIcon(item.icon)"
         >
-        <!-- If there is a value attached, show the value -->
         <div v-if="item.value">
           <h5>{{ item.name }}</h5>
           <h6>{{ item.value }} {{ chart_config.unit }}</h6>
@@ -147,33 +225,36 @@ button {
 .maplegend {
 	width: 100%;
 	height: 100%;
+	min-height: 0;
 	display: flex;
-	align-items: center;
-	justify-content: center;
-	margin-top: -var(--font-ms);
-	overflow: visible;
+	flex-direction: column;
+	gap: 4px;
+	overflow: hidden;
 
 	&-legend {
+		flex: 1;
+		min-height: 0;
 		width: 100%;
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		column-gap: 0.5rem;
-		row-gap: 0.5rem;
-		overflow: visible;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		overflow-y: auto;
 
 		&-item {
 			display: flex;
 			align-items: center;
-			padding: 5px 10px 5px 5px;
+			padding: 4px 8px;
 			border: 1px solid transparent;
-			border-radius: 5px;
+			border-radius: 6px;
 			transition: box-shadow 0.2s;
 			cursor: auto;
+			width: 100%;
 
 			div:first-child,
 			img {
 				width: var(--font-ms);
-				margin-right: 0.75rem;
+				flex-shrink: 0;
+				margin-right: 0.6rem;
 			}
 
 			h5 {
@@ -202,6 +283,83 @@ button {
 
 	&-selected {
 		box-shadow: 0px 0px 5px black;
+	}
+}
+
+/* 時間控制：上下兩排，緊湊版 */
+.maplegend-anim {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--color-border);
+
+	&-month {
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: var(--color-complement-text);
+		white-space: nowrap;
+		line-height: 1.3;
+	}
+
+	&-bar {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		width: 100%;
+	}
+
+	&-btn {
+		background: transparent;
+		border: 1px solid var(--color-border) !important;
+		border-radius: 4px;
+		padding: 0 3px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		color: var(--color-normal-text);
+		transition: background 0.15s;
+		flex-shrink: 0;
+
+		&:hover { background: var(--color-highlight); }
+
+		.material-icons { font-size: 16px; }
+	}
+
+	&-slider {
+		flex: 1;
+		min-width: 0;
+		height: 4px;
+		-webkit-appearance: none;
+		appearance: none;
+		background: var(--color-border);
+		border-radius: 2px;
+		outline: none;
+		cursor: pointer;
+
+		&::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			width: 14px;
+			height: 14px;
+			border-radius: 50%;
+			background: var(--color-highlight);
+			cursor: pointer;
+			transition: transform 0.1s;
+
+			&:hover { transform: scale(1.2); }
+		}
+
+		&::-moz-range-thumb {
+			width: 14px;
+			height: 14px;
+			border-radius: 50%;
+			background: var(--color-highlight);
+			cursor: pointer;
+			border: none;
+		}
 	}
 }
 </style>

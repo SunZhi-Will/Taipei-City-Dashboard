@@ -1,0 +1,37 @@
+{
+    "dag_infos": {
+        "dag_id": "ntpc_food_factory",
+        "start_date": "2025-01-01",
+        "schedule_interval": "0 2 1 1 *",
+        "catchup": false,
+        "tags": ["food_safety", "新北市", "食品工廠", "newtaipei"],
+        "description": "新北市食品工廠清冊，含廠商名稱、地址及 WGS84 座標。",
+        "default_args": {
+            "owner": "airflow",
+            "email": ["DEFAULT_EMAIL_LIST"],
+            "email_on_retry": false,
+            "email_on_failure": true,
+            "retries": 1,
+            "retry_delay": 60
+        },
+        "ready_data_db": "postgres_default",
+        "ready_data_default_table": "ntpc_food_factory",
+        "ready_data_history_table": "",
+        "raw_data_db": "postgres_default",
+        "raw_data_table": "",
+        "load_behavior": "replace"
+    },
+    "data_infos": {
+        "name_cn": "新北市食品工廠清冊",
+        "airflow_update_freq": "02:00 1st Jan every year",
+        "source": "https://data.ntpc.gov.tw/datasets/c51d5111-c300-44c9-b4f1-4b28b9929ca2",
+        "source_type": "ntpc open data api",
+        "source_dept": "新北市政府衛生局食品藥物管理科",
+        "gis_format": "Point",
+        "output_coordinate": "EPSG:4326",
+        "is_geometry": 1,
+        "dataset_description": "新北市已登記食品製造工廠清冊，含油脂、肉品、糕餅、飲料等類別，共 1,232 筆，最新資料日期 2023-07-31",
+        "etl_description": "paginate NTPC API, convert WGS84 coords to WKB geometry Point",
+        "sensitivity": "public"
+    }
+}

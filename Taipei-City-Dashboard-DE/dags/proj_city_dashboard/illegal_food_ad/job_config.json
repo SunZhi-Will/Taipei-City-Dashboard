@@ -1,0 +1,37 @@
+{
+    "dag_infos": {
+        "dag_id": "illegal_food_ad",
+        "start_date": "2025-01-01",
+        "schedule_interval": "0 3 1 * *",
+        "catchup": false,
+        "tags": ["food_safety", "台北", "雙北", "違規食品", "廣告", "衛福部"],
+        "description": "衛福部食藥署違規食品廣告案件查詢（雙北地區），含違規產品、廠商、處分機關、法條。",
+        "default_args": {
+            "owner": "airflow",
+            "email": ["DEFAULT_EMAIL_LIST"],
+            "email_on_retry": false,
+            "email_on_failure": true,
+            "retries": 1,
+            "retry_delay": 60
+        },
+        "ready_data_db": "postgres_default",
+        "ready_data_default_table": "illegal_food_ad",
+        "ready_data_history_table": "",
+        "raw_data_db": "postgres_default",
+        "raw_data_table": "",
+        "load_behavior": "replace"
+    },
+    "data_infos": {
+        "name_cn": "雙北違規食品廣告案件（衛福部食藥署）",
+        "airflow_update_freq": "03:00 1st of every month",
+        "source": "https://pmds.fda.gov.tw/illegalad/CaseSearch.aspx",
+        "source_type": "web scraping (ASP.NET PostBack + pagination)",
+        "source_dept": "衛生福利部食品藥物管理署",
+        "gis_format": "",
+        "output_coordinate": "",
+        "is_geometry": 0,
+        "dataset_description": "臺北市（台北）及新北市（雙北）違規食品廣告案件，包含違規產品名稱、廠商/個人姓名、處分機關、處分日期、違反法條。資料以處分機關篩選雙北地區。",
+        "etl_description": "scrape CaseSearch.aspx via ASP.NET PostBack for 臺北市 and 新北市 (ddlTransferOrgan), parse HTML table, follow next-page links until exhausted, convert ROC dates to Gregorian",
+        "sensitivity": "public"
+    }
+}
