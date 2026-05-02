@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"slices"
 	"strconv"
 	"strings"
@@ -290,6 +291,8 @@ func GetComponentByQueryVectorRich(queryString string, limit int, scoreThreshold
 		return nil, err
 	}
 
+	queryDomain := detectQueryDomain(queryString)
+
 	result, err := queryQdrant(vector, limit, scoreThreshold)
 	if err != nil {
 		return nil, err
@@ -306,6 +309,8 @@ func GetComponentByQueryVectorRich(queryString string, limit int, scoreThreshold
 		index string
 		name  string
 		city  string
+		longDesc string
+		useCase  string
 		score float64
 	}
 	items := make([]qdrantItem, 0, len(points))
@@ -326,6 +331,8 @@ func GetComponentByQueryVectorRich(queryString string, limit int, scoreThreshold
 			index: fmt.Sprintf("%v", payload["index"]),
 			name:  fmt.Sprintf("%v", payload["name"]),
 			city:  fmt.Sprintf("%v", payload["city"]),
+			longDesc: fmt.Sprintf("%v", payload["long_desc"]),
+			useCase:  fmt.Sprintf("%v", payload["use_case"]),
 			score: roundedScore,
 		})
 		ids = append(ids, id)
@@ -376,9 +383,127 @@ func GetComponentByQueryVectorRich(queryString string, limit int, scoreThreshold
 			}
 			r.ChartTypes = types
 		}
+
+		if queryDomain == "food_safety" {
+			text := strings.ToLower(strings.Join([]string{
+				item.index,
+				item.name,
+				item.longDesc,
+				item.useCase,
+				r.ShortDesc,
+			}, " "))
+			if !containsAnyToken(text, foodSafetyTokens()) {
+				continue
+			}
+		}
+
+		boost := lexicalRelevanceBoost(queryString, item.index, item.name, r.ShortDesc)
+		if boost > 0 {
+			r.Score = math.Round(math.Min(1.0, item.score+boost)*10000) / 10000
+		}
+
 		rich = append(rich, r)
 	}
+
+	sort.SliceStable(rich, func(i, j int) bool {
+		return rich[i].Score > rich[j].Score
+	})
+
+	if limit > 0 && len(rich) > limit {
+		rich = rich[:limit]
+	}
+
 	return rich, nil
+}
+
+func detectQueryDomain(query string) string {
+	q := strings.ToLower(query)
+	if containsAnyToken(q, foodSafetyTokens()) {
+		return "food_safety"
+	}
+	return "general"
+}
+
+func containsAnyToken(text string, tokens []string) bool {
+	for _, token := range tokens {
+		if token == "" {
+			continue
+		}
+		if strings.Contains(text, strings.ToLower(token)) {
+			return true
+		}
+	}
+	return false
+}
+
+func foodSafetyTokens() []string {
+	return []string{
+		"食安", "食品", "食品業者", "衛生", "稽查", "抽驗", "中毒", "農藥", "工廠", "批發市場",
+		"food", "food safety", "pesticide", "inspection",
+	}
+}
+
+func lexicalRelevanceBoost(query, index, name, shortDesc string) float64 {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return 0
+	}
+
+	idx := strings.ToLower(index)
+	nm := strings.ToLower(name)
+	desc := strings.ToLower(shortDesc)
+
+	boost := 0.0
+	if strings.Contains(nm, q) || strings.Contains(idx, q) {
+		boost += 0.20
+	}
+
+	if strings.Contains(q, nm) {
+		boost += 0.10
+	}
+
+	for _, token := range queryTokens(q) {
+		if strings.Contains(nm, token) {
+			boost += 0.03
+		}
+		if strings.Contains(idx, token) {
+			boost += 0.02
+		}
+		if strings.Contains(desc, token) {
+			boost += 0.01
+		}
+	}
+
+	if boost > 0.25 {
+		return 0.25
+	}
+	return boost
+}
+
+func queryTokens(q string) []string {
+	parts := strings.FieldsFunc(q, func(r rune) bool {
+		switch r {
+		case ' ', ',', '，', '。', '、', '\t', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+
+	tokens := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		tokens = append(tokens, p)
+	}
+
+	if len(tokens) == 0 {
+		tokens = append(tokens, q)
+	}
+
+	return tokens
 }
 
 // ComponentChartMeta holds chart capability metadata for a single component, used by AI planning.

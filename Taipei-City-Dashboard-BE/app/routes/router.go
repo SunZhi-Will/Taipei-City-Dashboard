@@ -42,6 +42,16 @@ func ConfigureRoutes() {
 	configureContributorRoutes()
 	configureChatLogRoutes()
 	configureAIRoutes()
+	configureQdrantRoutes()
+}
+
+func configureQdrantRoutes() {
+	qdrantRoutes := RouterGroup.Group("/qdrant")
+	qdrantRoutes.Use(middleware.LimitAPIRequests(global.ComponentLimitAPIRequestsTimes, global.LimitRequestsDuration))
+	qdrantRoutes.Use(middleware.LimitTotalRequests(global.ComponentLimitTotalRequestsTimes, global.LimitRequestsDuration))
+	{
+		qdrantRoutes.POST("/rebuild", controllers.TriggerQdrantRebuild)
+	}
 }
 
 func configureAuthRoutes() {

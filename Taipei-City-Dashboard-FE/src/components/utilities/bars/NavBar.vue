@@ -65,7 +65,7 @@ const isLocalhost = computed(() => {
             alt="tuic logo"
           >
         </div>
-        <div>
+        <div class="navbar-logo-text">
           <h1>{{ VITE_APP_TITLE }}</h1>
           <h2>Taipei City Dashboard</h2>
         </div>
@@ -233,10 +233,12 @@ const isLocalhost = computed(() => {
     &-logo {
       display: flex;
       align-items: center;
+      height: 100%;
 
       &-link {
         display: flex;
         align-items: center;
+        height: 100%;
         text-decoration: none;
         transition: opacity 0.2s;
 
@@ -245,10 +247,18 @@ const isLocalhost = computed(() => {
         }
       }
 
+      &-text {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        height: 100%;
+      }
+
       h1 {
         font-weight: 500;
         font-size: 1.15rem;
         line-height: 1.1;
+        margin: 0;
         
         @media screen and (max-width: 500px) {
           display: none;
@@ -260,6 +270,7 @@ const isLocalhost = computed(() => {
         font-weight: 400;
         color: var(--color-complement-text);
         line-height: 1;
+        margin: 0;
 
         @media screen and (max-width: 500px) {
           display: none;
@@ -270,6 +281,8 @@ const isLocalhost = computed(() => {
         width: 22.94px;
         height: 45px;
         margin: 0 var(--font-m);
+        display: flex;
+        align-items: center;
 
         img {
           height: 45px;
@@ -280,6 +293,7 @@ const isLocalhost = computed(() => {
       &-titles {
         display: flex;
         align-items: center;
+        height: 100%;
         gap: 4px;
       }
 
@@ -287,6 +301,9 @@ const isLocalhost = computed(() => {
         margin: 0 8px;
         opacity: 0.5;
         font-weight: 300;
+        display: flex;
+        align-items: center;
+        height: 100%;
 
         @media screen and (max-width: 768px) {
           display: none;
@@ -296,10 +313,12 @@ const isLocalhost = computed(() => {
       &-theme-name {
         display: flex;
         align-items: center;
+        height: 100%;
         gap: 6px;
         font-size: var(--font-s);
         font-weight: 500;
         color: var(--color-highlight);
+        line-height: 1;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -316,6 +335,7 @@ const isLocalhost = computed(() => {
           padding: 6px 10px;
           border-radius: 8px;
           min-height: 36px;
+          height: auto; /* Reset height on mobile to keep the button shape */
         }
 
         @media screen and (max-width: 480px) {
@@ -335,6 +355,8 @@ const isLocalhost = computed(() => {
         color: var(--color-highlight);
         margin-left: 2px;
         transition: transform 0.3s ease;
+        display: flex;
+        align-items: center;
       }
 
       &-name--active {

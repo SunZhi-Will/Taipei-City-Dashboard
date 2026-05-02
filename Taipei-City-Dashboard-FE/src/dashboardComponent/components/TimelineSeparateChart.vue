@@ -155,35 +155,29 @@ watch(
       v-if="showControls"
       class="timechart-controls"
     >
-      <!-- KPI：合格 / 不合格 即時數字 -->
-      <div class="timechart-kpi">
-        <span class="timechart-kpi-month">{{ formatMonthLabel(currentMonth) }}</span>
-        <span
-          v-if="monthStats"
-          class="timechart-kpi-pass"
-        >合格 {{ monthStats.pass }}</span>
-        <span
-          v-if="monthStats"
-          class="timechart-kpi-fail"
-        >不合格 {{ monthStats.fail }}</span>
-      </div>
-      <!-- 播放列：播放/暫停 + 播放進度條 -->
-      <div class="timechart-playbar">
-        <button
-          class="timechart-playbtn"
-          :title="isPlaying ? '暫停' : '播放月份動畫'"
-          @click="togglePlay"
-        >
-          <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
-        </button>
-        <input
-          type="range"
-          class="timechart-slider"
-          :min="0"
-          :max="availableMonths.length - 1"
-          :value="availableMonths.indexOf(currentMonth)"
-          @input="onMonthSelect(availableMonths[$event.target.value])"
-        >
+      <button
+        class="timechart-playbtn"
+        :title="isPlaying ? '暫停' : '播放月份動畫'"
+        @click="togglePlay"
+      >
+        <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
+      </button>
+      
+      <input
+        type="range"
+        class="timechart-slider"
+        :min="0"
+        :max="availableMonths.length - 1"
+        :value="availableMonths.indexOf(currentMonth)"
+        @input="onMonthSelect(availableMonths[$event.target.value])"
+      >
+
+      <div class="timechart-info">
+        <span class="timechart-info-month">{{ formatMonthLabel(currentMonth) }}</span>
+        <div class="timechart-kpi" v-if="monthStats">
+          <span class="timechart-kpi-pass">合 {{ monthStats.pass }}</span>
+          <span class="timechart-kpi-fail">不合 {{ monthStats.fail }}</span>
+        </div>
       </div>
     </div>
 
@@ -200,46 +194,48 @@ watch(
 <style scoped lang="scss">
 .timechart-controls {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 6px;
-	padding: 8px 0;
-	margin-bottom: 8px;
-	border-bottom: 1px solid var(--color-border);
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+	padding: 4px 0;
+	margin-bottom: 6px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.timechart-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 80px;
+  flex-shrink: 0;
+
+  &-month {
+    font-size: 0.75rem;
+    color: var(--color-highlight);
+    font-weight: 700;
+    white-space: nowrap;
+  }
 }
 
 .timechart-kpi {
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	flex-wrap: wrap;
-}
-
-.timechart-kpi-month {
-	font-size: 0.85rem;
-	color: var(--color-highlight);
-	font-weight: 700;
-	white-space: nowrap;
+	gap: 6px;
 }
 
 .timechart-kpi-pass {
-	font-size: 0.8rem;
+	font-size: 0.7rem;
 	color: #2ecc71;
 	font-weight: 600;
 }
 
 .timechart-kpi-fail {
-	font-size: 0.8rem;
+	font-size: 0.7rem;
 	color: #e74c3c;
 	font-weight: 600;
 }
 
-.timechart-playbar {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-}
 
 .timechart-playbtn {
 	width: 28px;

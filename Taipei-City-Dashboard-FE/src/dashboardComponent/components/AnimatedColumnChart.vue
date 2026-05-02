@@ -126,26 +126,23 @@ onUnmounted(() => {
 
 <template>
   <div v-if="activeChart === 'AnimatedColumnChart' && monthlyData.months.length > 0">
-    <!-- 控制列 (優化版) -->
     <div class="animcol-controls">
+      <button
+        class="animcol-playbtn"
+        :title="isPlaying ? '暫停' : '播放月份動畫'"
+        @click="togglePlay"
+      >
+        <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
+      </button>
+      <input
+        type="range"
+        class="animcol-slider"
+        :min="0"
+        :max="monthlyData.months.length - 1"
+        :value="currentIdx"
+        @input="onMonthSelect(monthlyData.months[$event.target.value])"
+      >
       <span class="animcol-month">{{ formatMonthLabel(currentMonth) }}</span>
-      <div class="animcol-playbar">
-        <button
-          class="animcol-playbtn"
-          :title="isPlaying ? '暫停' : '播放月份動畫'"
-          @click="togglePlay"
-        >
-          <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
-        </button>
-        <input
-          type="range"
-          class="animcol-slider"
-          :min="0"
-          :max="monthlyData.months.length - 1"
-          :value="currentIdx"
-          @input="onMonthSelect(monthlyData.months[$event.target.value])"
-        >
-      </div>
     </div>
 
     <VueApexCharts
@@ -161,29 +158,25 @@ onUnmounted(() => {
 <style scoped lang="scss">
 .animcol-controls {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 6px;
-	padding: 8px 0;
-	margin-bottom: 8px;
-	border-bottom: 1px solid var(--color-border);
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+	padding: 4px 0;
+	margin-bottom: 6px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .animcol-month {
-	font-size: 0.85rem;
+	font-size: 0.8rem;
 	font-weight: 700;
 	color: var(--color-highlight);
 	white-space: nowrap;
 	line-height: 1;
 	letter-spacing: 0.02em;
+	min-width: 90px;
+	text-align: right;
 }
 
-.animcol-playbar {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-}
 
 .animcol-playbtn {
 	width: 28px;

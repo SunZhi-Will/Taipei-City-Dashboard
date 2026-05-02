@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 // import "./styles/chartStyles.css";
 // import "./styles/toggleswitch.css";
 import { getComponentDataTimeframe } from "./utilities/dataTimeframe";
@@ -88,6 +88,7 @@ const emits = defineEmits([
 	"delete",
 	"add",
 	"info",
+	"chartTypeChange",
 	"toggle",
 	"filterByParam",
 	"filterByLayer",
@@ -184,6 +185,14 @@ function changeActiveChart(chartName) {
 	}
 	activeChart.value = chartName;
 }
+
+watch(activeChart, async () => {
+	emits("chartTypeChange", props.config.id, activeChart.value);
+	await nextTick();
+	requestAnimationFrame(() => {
+		window.dispatchEvent(new Event("resize"));
+	});
+}, { immediate: true });
 // Updates the location for the tag tooltip
 function updateMouseLocation(e) {
 	mousePosition.value.x = e.pageX;
@@ -464,9 +473,8 @@ function returnChartComponent(name, svg) {
         }"
       >
         <component
-          :is="returnChartComponent(item)"
-          v-for="item in config.chart_config.types"
-          :key="`${props.config.index}-${item}-chart-${item.city}`"
+		  :is="returnChartComponent(activeChart)"
+		  :key="`${props.config.index}-${activeChart}-chart-${activeCity}`"
           :active-chart="activeChart"
           :active-city="activeCity"
           :chart_config="config.chart_config"
@@ -794,7 +802,7 @@ button:hover {
 		top: 4.2rem;
 		left: 0;
 		z-index: 8;
-		padding: 8px 0;
+		padding: 4px 0;
 
 		&-group {
 			display: flex;
@@ -842,7 +850,7 @@ button:hover {
 	&-error {
 		height: 75%;
 		position: relative;
-		padding-top: 1%;
+		padding-top: 0.5%;
 		overflow-y: auto;
 		scrollbar-width: none;
 
@@ -1098,7 +1106,7 @@ button:hover {
 .city {
 	&-tag {
 		&-container {
-			margin: 4px 0;
+			margin: 2px 0;
 			display: flex;
 			gap: 5px;
 	

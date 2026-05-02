@@ -22,6 +22,10 @@ const emits = defineEmits([
 
 const chartOptions = ref({
 	chart: {
+		redrawOnParentResize: true,
+		redrawOnWindowResize: true,
+		parentHeightOffset: 0,
+		offsetX: 6,
 		offsetY: 15,
 		stacked: true,
 		toolbar: {
@@ -36,7 +40,7 @@ const chartOptions = ref({
 	grid: {
 		show: false,
 		padding: {
-			left: 0,
+			left: 24,
 			right: 4,
 		},
 	},
@@ -95,9 +99,9 @@ const chartOptions = ref({
 	yaxis: {
 		labels: {
 			align: "left",
-			minWidth: 0,
-			maxWidth: 56,
-			offsetX: -6,
+			minWidth: 72,
+			maxWidth: 96,
+			offsetX: 0,
 			formatter: function (value) {
 				const label = String(value).trim();
 				return label.length > 7 ? label.slice(0, 6) + "..." : label;

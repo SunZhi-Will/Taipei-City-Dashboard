@@ -24,6 +24,7 @@ const contentStore = useContentStore();
 const dialogStore = useDialogStore();
 const authStore = useAuthStore();
 const expandedComponentId = ref(null);
+const componentActiveCharts = ref({});
 
 const expandedComponent = computed(() => {
 	return (
@@ -72,8 +73,107 @@ watch(
 	() => contentStore.currentDashboard.index,
 	() => {
 		expandedComponentId.value = null;
+    componentActiveCharts.value = {};
 	}
 );
+
+const WIDE_CHART_TYPES = new Set([
+  "TimelineStackedChart",
+  "TimelineSeparateChart",
+  "HeatmapChart",
+  "MetroChart",
+  "TreemapChart",
+]);
+
+const TALL_CHART_TYPES = new Set([
+  "BarChart",
+  "BarPercentChart",
+  "BarChartWithGoal",
+  "ColumnChart",
+  "ColumnLineChart",
+  "AnimatedColumnChart",
+]);
+
+const DASHBOARD_LAYOUT_PROFILES = {
+  food_safety_tpe: {
+    taipei_imap_food: "",
+    food_poisoning_food: (activeChart) =>
+      activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
+    food_poisoning_cause: (activeChart) =>
+      activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
+    ntpc_food_factory: "",
+    food_poisoning_trend: "dashboard-tile--wide",
+    food_poisoning_place: "dashboard-tile--tall",
+    wholesale_pesticide_inspection: "",
+    school_kitchen_imap: "",
+  },
+  food_safety_taipei: {
+    taipei_imap_food: "",
+    food_poisoning_food: (activeChart) =>
+      activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
+    food_poisoning_cause: (activeChart) =>
+      activeChart === "BarChart" ? "dashboard-tile--x-tall" : "",
+    food_poisoning_trend: "dashboard-tile--wide",
+    food_poisoning_place: "dashboard-tile--tall",
+    wholesale_pesticide_inspection_taipei: "",
+    school_kitchen_imap: "",
+  },
+};
+
+function getTileClass(item, index) {
+  const dashboardIndex = contentStore.currentDashboard?.index;
+  const activeChart = componentActiveCharts.value[item?.id] || item?.chart_config?.types?.[0] || "";
+  const profileClass = DASHBOARD_LAYOUT_PROFILES[dashboardIndex]?.[item?.index];
+
+  if (profileClass !== undefined) {
+	return typeof profileClass === "function"
+	  ? profileClass(activeChart, item)
+	  : profileClass;
+  }
+
+  const chartTypes = item?.chart_config?.types || [];
+  const hasDenseSeries = Array.isArray(item?.chart_data) && item.chart_data.length >= 12;
+  const hasMultiChartTypes = chartTypes.length > 1;
+  const hasWideChartType = WIDE_CHART_TYPES.has(activeChart);
+	const hasTallActiveChart = TALL_CHART_TYPES.has(activeChart);
+
+  if (hasMultiChartTypes && hasWideChartType) {
+    return "dashboard-tile--wide-tall";
+  }
+
+  if (hasMultiChartTypes && hasTallActiveChart) {
+    return "dashboard-tile--x-tall";
+  }
+
+  if (hasWideChartType) {
+    return "dashboard-tile--wide";
+  }
+
+  if (
+    hasDenseSeries ||
+    hasTallActiveChart ||
+    (index + 1) % 6 === 0
+  ) {
+    return "dashboard-tile--tall";
+  }
+
+  return "";
+}
+
+function getTileComponentStyle() {
+  return {
+    height: "100%",
+    maxHeight: "none",
+    minHeight: "0",
+  };
+}
+
+function handleChartTypeChange(componentId, chartType) {
+	componentActiveCharts.value = {
+		...componentActiveCharts.value,
+		[componentId]: chartType,
+	};
+}
 
 function handleOpenSettings() {
 	contentStore.editDashboard = JSON.parse(
@@ -150,6 +250,7 @@ function handleMoreInfo(item) {
       @info="(item) => { handleMoreInfo(item); }"
       @delete="handleDeleteExpanded"
       @change-city="handleChangeCityExpanded"
+      @chart-type-change="(id, chartType) => { handleChartTypeChange(id, chartType); }"
     />
     <MoreInfo />
     <ReportIssue />
@@ -159,47 +260,53 @@ function handleMoreInfo(item) {
     v-else-if="contentStore.currentDashboard.index?.includes('map-layers')"
     class="dashboard"
   >
-    <DashboardComponent
-      v-for="item in contentStore.currentDashboard.components"
+    <div
+      v-for="(item, index) in contentStore.currentDashboard.components"
       :key="`${item.index}-${item.city}`"
-      :config="item"
-      mode="half"
-      :info-btn="true"
-      :active-city="item.city"
-      :select-btn="true"
-      :select-btn-disabled="contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city).length === 1"
-      :select-btn-list="contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city)"
-      :city-tag="contentStore.cityManager.getTagList(contentStore.currentDashboard?.city)"
-      :favorite-btn="authStore.token ? true : false"
-      :is-favorite="contentStore.favorites?.components.includes(item.id)"
-      :expanded-in-content="false"
-      @expand-layout="toggleContentFocus"
-      @favorite="
-        (id) => {
-          toggleFavorite(id,item.name,item.city);
-        }
-      "
-      @info="
-        (item) => {
-          handleMoreInfo(item);
-        }
-      "
-      @change-city="(city)=> {
-        const selectedData = contentStore.cityDashboard.components.find((data) => {
-          if (data.index === item.index && data.city === city) {
-            return data
+      :class="['dashboard-tile', getTileClass(item, index)]"
+    >
+      <DashboardComponent
+        :config="item"
+        mode="half"
+        :style="getTileComponentStyle()"
+        :info-btn="true"
+        :active-city="item.city"
+        :select-btn="true"
+        :select-btn-disabled="contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city).length === 1"
+        :select-btn-list="contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city)"
+        :city-tag="contentStore.cityManager.getTagList(contentStore.currentDashboard?.city)"
+        :favorite-btn="authStore.token ? true : false"
+        :is-favorite="contentStore.favorites?.components.includes(item.id)"
+        :expanded-in-content="false"
+        @expand-layout="toggleContentFocus"
+        @favorite="
+          (id) => {
+            toggleFavorite(id,item.name,item.city);
           }
-        });
+        "
+        @info="
+          (item) => {
+            handleMoreInfo(item);
+          }
+        "
+        @chart-type-change="(id, chartType) => { handleChartTypeChange(id, chartType); }"
+        @change-city="(city)=> {
+          const selectedData = contentStore.cityDashboard.components.find((data) => {
+            if (data.index === item.index && data.city === city) {
+              return data
+            }
+          });
 
-        const componentIndex = contentStore.currentDashboard.components.findIndex(
-          (item) => item.id === selectedData.id
-        );
+          const componentIndex = contentStore.currentDashboard.components.findIndex(
+            (item) => item.id === selectedData.id
+          );
 
-        if (selectedData) {
-          contentStore.setComponentData(componentIndex, selectedData);
-        }
-      }"
-    />
+          if (selectedData) {
+            contentStore.setComponentData(componentIndex, selectedData);
+          }
+        }"
+      />
+    </div>
     <MoreInfo />
     <ReportIssue />
   </div>
@@ -208,66 +315,72 @@ function handleMoreInfo(item) {
     v-else-if="contentStore.currentDashboard.components?.length !== 0 || contentStore.cityDashboard.components?.length !== 0"
     class="dashboard"
   >
-    <DashboardComponent
-      v-for="item in contentStore.currentDashboard.components"
+    <div
+      v-for="(item, index) in contentStore.currentDashboard.components"
       :key="`${item.index}-${item.city}`"
-      :config="item"
-      :info-btn="true"
-      :active-city="item.city"
-      :select-btn="true"
-      :select-btn-disabled="contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city).length === 1 || contentStore.currentDashboardExcluded.components.filter((data) => data.index === item.index).length === 0"
-      :select-btn-list="contentStore.currentDashboard?.city
-        ? contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city)
-        : contentStore.cityManager.getCities(contentStore.cityManager.activeCities)
-      "
-      :city-tag="contentStore.currentDashboard?.city
-        ? contentStore.cityManager.getTagList(contentStore.currentDashboard?.city)
-        : contentStore.cityManager.getTagList(item.city)
-      "
-      :delete-btn="
-        contentStore.personalDashboards
-          .map((item) => item.index)
-          .includes(contentStore.currentDashboard.index)
-      "
-      :favorite-btn="
-        authStore.token &&
-          contentStore.currentDashboard.icon !== 'favorite'
-      "
-      :is-favorite="contentStore.favorites?.components.includes(item.id)"
-      :expanded-in-content="false"
-      @expand-layout="toggleContentFocus"
-      @favorite="
-        (id) => {
-          toggleFavorite(id,item.name,item.city);
-        }
-      "
-      @info="
-        (item) => {
-          handleMoreInfo(item);
-        }
-      "
-      @delete="
-        (id) => {
-          contentStore.deleteComponent(id);
-        }
-      "
-      @change-city="(city)=> {
-        const selectedData = contentStore.cityDashboard.components.find((data) => {
-          if (data.index === item.index && data.city === city) {
-            return data
+      :class="['dashboard-tile', getTileClass(item, index)]"
+    >
+      <DashboardComponent
+        :config="item"
+        :style="getTileComponentStyle()"
+        :info-btn="true"
+        :active-city="item.city"
+        :select-btn="true"
+        :select-btn-disabled="contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city).length === 1 || contentStore.currentDashboardExcluded.components.filter((data) => data.index === item.index).length === 0"
+        :select-btn-list="contentStore.currentDashboard?.city
+          ? contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city)
+          : contentStore.cityManager.getCities(contentStore.cityManager.activeCities)
+        "
+        :city-tag="contentStore.currentDashboard?.city
+          ? contentStore.cityManager.getTagList(contentStore.currentDashboard?.city)
+          : contentStore.cityManager.getTagList(item.city)
+        "
+        :delete-btn="
+          contentStore.personalDashboards
+            .map((item) => item.index)
+            .includes(contentStore.currentDashboard.index)
+        "
+        :favorite-btn="
+          authStore.token &&
+            contentStore.currentDashboard.icon !== 'favorite'
+        "
+        :is-favorite="contentStore.favorites?.components.includes(item.id)"
+        :expanded-in-content="false"
+        @expand-layout="toggleContentFocus"
+        @favorite="
+          (id) => {
+            toggleFavorite(id,item.name,item.city);
           }
-        });
+        "
+        @info="
+          (item) => {
+            handleMoreInfo(item);
+          }
+        "
+        @delete="
+          (id) => {
+            contentStore.deleteComponent(id);
+          }
+        "
+        @chart-type-change="(id, chartType) => { handleChartTypeChange(id, chartType); }"
+        @change-city="(city)=> {
+          const selectedData = contentStore.cityDashboard.components.find((data) => {
+            if (data.index === item.index && data.city === city) {
+              return data
+            }
+          });
 
-        const componentIndex = contentStore.currentDashboard.components.findIndex(
-          (item) => item.id === selectedData.id
-        );
+          const componentIndex = contentStore.currentDashboard.components.findIndex(
+            (item) => item.id === selectedData.id
+          );
 
-        if (selectedData) {
-          contentStore.setComponentData(componentIndex, selectedData);
+          if (selectedData) {
+            contentStore.setComponentData(componentIndex, selectedData);
+          }
         }
-      }
-      "
-    />
+        "
+      />
+    </div>
     <MoreInfo />
     <ReportIssue />
   </div>
@@ -317,11 +430,73 @@ function handleMoreInfo(item) {
 	display: grid;
 	row-gap: 12px;
 	column-gap: 12px;
+  grid-auto-flow: dense;
+  grid-auto-rows: 180px;
   margin: var(--font-m);
+
+  &-tile {
+    min-width: 0;
+    grid-column: span 1;
+    grid-row: span 2;
+
+    :deep(.dashboardcomponent-fullscreen-container) {
+      height: 100%;
+    }
+
+    :deep(.dashboardcomponent) {
+      height: 100% !important;
+      max-height: none !important;
+      min-height: 0 !important;
+    }
+
+    :deep(.dashboardcomponent-chart),
+    :deep(.dashboardcomponent-loading),
+    :deep(.dashboardcomponent-error) {
+      height: calc(100% - 88px);
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+  }
+
+  &-tile--wide {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+
+  &-tile--tall {
+    grid-column: span 1;
+    grid-row: span 3;
+  }
+
+  &-tile--x-tall {
+    grid-column: span 1;
+    grid-row: span 4;
+  }
+
+  &-tile--wide-tall {
+    grid-column: span 2;
+    grid-row: span 3;
+  }
 
 	@media (max-width: 768px) {
 		margin: 12px;
 		row-gap: 16px;
+    grid-auto-rows: auto;
+
+    &-tile,
+    &-tile--wide,
+    &-tile--tall,
+    &-tile--x-tall,
+    &-tile--wide-tall {
+      grid-column: span 1;
+      grid-row: span 1;
+    }
+
+    &-tile :deep(.dashboardcomponent-chart),
+    &-tile :deep(.dashboardcomponent-loading),
+    &-tile :deep(.dashboardcomponent-error) {
+      height: 75%;
+    }
 	}
 
 	@media (min-width: 720px) {
