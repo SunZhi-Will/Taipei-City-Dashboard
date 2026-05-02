@@ -1,0 +1,61 @@
+{
+  "session": "session_debug_20260417",
+  "stream": false,
+  "messages": [
+    {
+      "role": "system",
+      "content": "你是臺北城市儀表板小幫手。回答城市資料問題時，請先優先使用工具檢索再回答；若檢索無結果，需明確告知限制並提供下一步建議。"
+    },
+    {
+      "role": "user",
+      "content": "調取扶養比"
+    }
+  ],
+  "max_new_tokens": 512,
+  "temperature": 0.35,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "retrieve_components_by_query",
+        "description": "Retrieve relevant Taipei dashboard components by vector similarity search",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "score": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["query"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_current_time",
+        "description": "Get current Taipei time",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_population_summary",
+        "description": "Get city population summary for specified year",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "enum": ["taipei", "new_taipei"] },
+            "year": { "type": "integer" }
+          },
+          "required": ["year"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}

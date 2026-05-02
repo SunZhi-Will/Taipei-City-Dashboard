@@ -31,13 +31,14 @@ import NotificationBar from "./components/dialogs/NotificationBar.vue";
 import InitialWarning from "./components/dialogs/InitialWarning.vue";
 import ComponentSideBar from "./components/utilities/bars/ComponentSideBar.vue";
 import LogIn from "./components/dialogs/LogIn.vue";
-import ChatBox from "./components/dialogs/ChatBox.vue";
-import ChatBotIcon from "./components/icons/ChatBotIcon.vue";
+import ChatWidgetMount from "./components/chat/ChatWidgetMount.vue";
+// AI 思考流程對話框
+import AITraceDialog from "./components/dialogs/AITraceDialog.vue";
+
 
 const authStore = useAuthStore();
 const dialogStore = useDialogStore();
 const contentStore = useContentStore();
-const timeToUpdate = ref(600);
 
 const mapStore = useMapStore();
 const route = useRoute();
@@ -47,9 +48,6 @@ const boardIndex = ref(null);
 const board = ref(null);
 const frequency = ref(600);
 const isMappedToUpdateBoards = ref(false);
-// Chatroom
-const isChatBtnShow = ref(true);
-const isChatBoxShow = ref(false);
 // Timers
 let chartTimer = null;
 let crowdingTimer = null;
@@ -69,15 +67,23 @@ const updateBoardsMap = computed(() => {
 });
 
 const formattedTimeToUpdate = computed(() => {
-	const minutes = Math.floor(timeToUpdate.value / 60);
-	const seconds = timeToUpdate.value % 60;
+	const minutes = Math.floor(contentStore.timeToUpdate / 60);
+	const seconds = contentStore.timeToUpdate % 60;
 	return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+});
+
+const isAIStudioImmersive = computed(() => {
+	return authStore.currentPath === "ai-studio" && route.query.fullscreen === "1";
+});
+
+const shouldShowChatWidget = computed(() => {
+	return ["dashboard", "mapview"].includes(authStore.currentPath);
 });
 
 function reloadChartData() {
 	if (!["dashboard", "mapview"].includes(authStore.currentPath)) return;
 	contentStore.updateCurrentDashboardAllChartData();
-	timeToUpdate.value = frequency.value;
+	contentStore.timeToUpdate = frequency.value;
 
 	if (isMappedToUpdateBoards.value) {
 		reloadMapData();
@@ -99,12 +105,12 @@ async function reloadCrowdingChartData() {
 
 function updateTimeToUpdate() {
 	if (!["dashboard", "mapview"].includes(authStore.currentPath)) return;
-	if (timeToUpdate.value <= 0) {
-		timeToUpdate.value = 0;
+	if (contentStore.timeToUpdate <= 0) {
+		contentStore.timeToUpdate = 0;
 		reloadChartData();
 		return;
 	}
-	timeToUpdate.value -= 5;
+	contentStore.timeToUpdate -= 5;
 }
 
 function reloadMapData() {
@@ -159,15 +165,25 @@ function reload3DMRTMapData() {
 	});
 }
 
-// Chatroom 功能顯示隱藏
-function chatbotBtnHandler() {
-	isChatBoxShow.value = !isChatBoxShow.value;
-}
+const navItems = [
+	{ name: "儀表板", icon: "dashboard", path: "/dashboard", id: "dashboard", type: "link" },
+	{ name: "地圖", icon: "map", path: "/mapview", id: "mapview", type: "link" },
+	{ name: "組件", icon: "widgets", path: "/component", id: "component", type: "link", authRequired: true },
+	{ name: "AI", icon: "psychology", path: "/ai-studio", id: "ai-studio", type: "link" },
+	{ name: "登入", icon: "login", id: "login", type: "action", action: () => dialogStore.showDialog('login'), guestOnly: true },
+];
 
-function hideBtnClickHandler() {
-	isChatBtnShow.value = false;
-	isChatBoxShow.value = false;
-}
+const filteredNavItems = computed(() => {
+	return navItems.filter(item => {
+		if (item.authRequired) return !!authStore.token;
+		if (item.guestOnly) return !authStore.token;
+		return true;
+	});
+});
+
+const isNavItemActive = (itemId) => {
+	return authStore.currentPath.includes(itemId);
+};
 
 (watch(
 	() => route.query,
@@ -180,7 +196,7 @@ function hideBtnClickHandler() {
 		isMappedToUpdateBoards.value = updateBoardsMap.value.some((board) => {
 			return board.id === query.index;
 		});
-		timeToUpdate.value = frequency.value;
+		contentStore.timeToUpdate = frequency.value;
 	},
 ),
 { immediate: true });
@@ -219,175 +235,216 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-container">
+  <div
+    class="app-container"
+    :class="{ 'is-mobile': authStore.isNarrowDevice }"
+  >
     <NotificationBar />
-    <NavBar v-if="authStore.currentPath !== 'embed'" />
-    <!-- /mapview, /dashboard layouts -->
-    <div
+    <NavBar
       v-if="
-        authStore.currentPath === 'mapview' ||
-          authStore.currentPath === 'dashboard'
+        authStore.currentPath !== 'embed' &&
+				authStore.currentPath !== 'mapview' &&
+				!isAIStudioImmersive
       "
-      class="app-content"
-    >
-      <SideBar />
-      <div class="app-content-main">
-        <SettingsBar />
+    />
+    
+    <!-- Content wrapper -->
+    <div class="app-viewport">
+      <!-- /mapview standalone fullscreen layout -->
+      <div
+        v-if="authStore.currentPath === 'mapview'"
+        class="app-mapview-layout"
+      >
         <RouterView />
       </div>
-    </div>
-    <!-- /admin layouts -->
-    <div
-      v-else-if="authStore.currentPath === 'admin'"
-      class="app-content"
-    >
-      <AdminSideBar />
-      <div class="app-content-main">
-        <RouterView />
+
+      <!-- /dashboard, /admin, /component layouts -->
+      <div
+        v-else-if="['dashboard', 'admin'].includes(authStore.currentPath) || authStore.currentPath.includes('component')"
+        class="app-content"
+      >
+        <SideBar v-if="authStore.currentPath === 'dashboard'" />
+        <AdminSideBar v-else-if="authStore.currentPath === 'admin'" />
+        <ComponentSideBar v-else-if="authStore.currentPath.includes('component')" />
+
+        <div class="app-content-main">
+          <SettingsBar v-if="authStore.currentPath === 'dashboard'" />
+          <div
+            class="app-content-body"
+            :class="{ 'app-content-body--flush': authStore.currentPath === 'ai-studio' }"
+          >
+            <RouterView />
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Studio layout -->
+      <div
+        v-else-if="authStore.currentPath === 'ai-studio'"
+        class="app-content"
+      >
+        <div class="app-content-main">
+          <div class="app-content-body app-content-body--flush">
+            <RouterView />
+          </div>
+        </div>
+      </div>
+
+      <div v-else>
+        <router-view />
       </div>
     </div>
-    <!-- /component, /component/:index layouts -->
-    <div
-      v-else-if="authStore.currentPath.includes('component')"
-      class="app-content"
+
+    <!-- Bottom Nav for Mobile -->
+    <nav 
+			v-if="authStore.isNarrowDevice && authStore.currentPath !== 'embed' && !isAIStudioImmersive"
+      class="app-bottom-nav"
     >
-      <ComponentSideBar />
-      <div class="app-content-main">
-        <RouterView />
-      </div>
-    </div>
-    <div v-else>
-      <router-view />
-    </div>
+      <template
+        v-for="item in filteredNavItems"
+        :key="item.id"
+      >
+        <router-link
+          v-if="item.type === 'link'"
+          :to="item.path"
+          class="app-bottom-nav-item"
+          :class="{ 'is-active': isNavItemActive(item.id) }"
+        >
+          <span class="app-bottom-nav-icon">{{ item.icon }}</span>
+          <span class="app-bottom-nav-label">{{ item.name }}</span>
+        </router-link>
+        <button
+          v-else
+          class="app-bottom-nav-item app-bottom-nav-item--btn"
+          type="button"
+          @click="item.action()"
+        >
+          <span class="app-bottom-nav-icon">{{ item.icon }}</span>
+          <span class="app-bottom-nav-label">{{ item.name }}</span>
+        </button>
+      </template>
+    </nav>
+
     <InitialWarning />
     <LogIn />
-    <div
-      v-if="
-        ['dashboard', 'mapview'].includes(authStore.currentPath) &&
-          !authStore.isMobile &&
-          !authStore.isNarrowDevice
-      "
-      class="app-update"
-    >
-      <p>下次更新：{{ formattedTimeToUpdate }}</p>
-    </div>
-    <div class="chatbot-container">
-      <ChatBox
-        v-if="isChatBoxShow"
-        class="chatbox"
-      />
-      <div
-        v-if="isChatBtnShow"
-        class="chatbot-btn-area"
-      >
-        <div class="hide-chat-btn">
-          <button @click="hideBtnClickHandler" />
-        </div>
-        <button
-          class="chatbot-btn"
-          @click="chatbotBtnHandler"
-        >
-          <ChatBotIcon />
-        </button>
-      </div>
-    </div>
+    <ChatWidgetMount v-if="shouldShowChatWidget" />
+    <AITraceDialog />
   </div>
 </template>
 
 <style scoped lang="scss">
 .app {
 	&-container {
-		max-width: 100vw;
-		max-height: 100vh;
-		max-height: calc(var(--vh) * 100);
+		display: flex;
+		flex-direction: column;
+		width: 100vw;
+		height: 100vh;
+		height: calc(var(--vh) * 100);
+		overflow: hidden;
+		background-color: var(--color-background);
+	}
+
+	&-viewport {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	&-mapview-layout {
+		width: 100%;
+		height: 100%;
 	}
 
 	&-content {
-		width: 100vw;
-		max-width: 100vw;
-		height: calc(100vh - 60px);
-		height: calc(var(--vh) * 100 - 60px);
+		flex: 1;
 		display: flex;
+		min-height: 0;
+		width: 100%;
 
 		&-main {
-			width: 100%;
+			flex: 1;
 			display: flex;
 			flex-direction: column;
-		}
-	}
-
-	&-update {
-		position: fixed;
-		bottom: 0;
-		right: 20px;
-		color: white;
-		opacity: 0.3;
-		transition: opacity 0.3s;
-		user-select: none;
-
-		p {
-			color: var(--color-complement-text);
+			min-width: 0;
+			height: 100%;
 		}
 
-		&:hover {
-			opacity: 1;
-		}
-	}
-}
+		&-body {
+			flex: 1;
+			overflow-y: auto;
+			overflow-x: hidden;
+			-webkit-overflow-scrolling: touch;
+			padding-bottom: 2rem;
 
-// Chatroom 樣式
-.chatbot-container {
-	position: fixed;
-	bottom: 1.5rem; // Tailwind bottom-6 → 24px
-	right: 1.5rem;
-	display: flex;
-	align-items: flex-end;
-	gap: 1rem; // Tailwind gap-4 → 16px
-	z-index: 10;
-
-	.chatbox {
-		width: 400px;
-		height: 500px;
-		margin-bottom: 35px;
-	}
-
-	.chatbot-btn-area {
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		.hide-chat-btn {
-			margin-left: auto;
-			button {
-				font-size: 16px;
-			}
-		}
-		.hide-chat-btn button::before {
-			content: "–";
-			font-weight: bold; /* 變粗 */
-			font-size: 20px; /* 可以順便調整大小 */
-		}
-		.chatbot-btn {
-			width: 70px;
-			height: 70px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border-radius: 50%;
-			background-color: #3b82f6; // Tailwind bg-blue-500
-			filter: brightness(1.5);
-			transition: filter 0.2s;
-
-			&:hover {
-				filter: brightness(1);
+			&--flush {
+				padding: 0;
 			}
 		}
 	}
+
+  /* Integrated Bottom Nav Styles */
+  &-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 70px;
+    background-color: var(--color-component-background);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.2);
+
+    &-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-complement-text);
+      text-decoration: none;
+      flex: 1;
+      height: 100%;
+      transition: var(--transition-fast);
+
+      &.is-active {
+        color: var(--color-highlight);
+        
+        .app-bottom-nav-icon {
+          transform: translateY(-2px);
+        }
+      }
+    }
+
+    &-icon {
+      font-family: var(--font-icon);
+      font-size: 24px;
+      margin-bottom: 4px;
+      transition: transform 0.2s ease;
+    }
+
+    &-label {
+      font-size: var(--font-xs);
+      font-weight: 500;
+    }
+
+    &-item--btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+  }
 }
 
-// 手機板隱藏小幫手
-@media (max-width: 600px) {
-	.chatbot-container {
-		display: none;
+/* Mobile specific overrides */
+.is-mobile {
+	.app-content-body {
+		padding-bottom: 80px; /* Extra padding for bottom nav */
 	}
 }
 </style>

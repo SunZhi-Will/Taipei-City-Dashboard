@@ -11,6 +11,7 @@ const props = defineProps([
 	"map_config",
 	"map_filter",
 	"map_filter_on",
+	"showColorLegend",
 ]);
 
 const emits = defineEmits([
@@ -21,6 +22,11 @@ const emits = defineEmits([
 	"fly"
 ]);
 
+function toFiniteNumber(value) {
+	const parsed = typeof value === "number" ? value : Number(value);
+	return Number.isFinite(parsed) ? parsed : 0;
+}
+
 // How many data points to show before summing all remaining points into "other"
 const steps = ref(100);
 
@@ -29,15 +35,15 @@ const steps = ref(100);
 const parsedSeries = computed(() => {
 	const toParse = [...props.series[0].data];
 	if (toParse.length <= steps.value) {
-		return toParse.map((item) => item.y);
+		return toParse.map((item) => toFiniteNumber(item.y));
 	}
 	let output = [];
 	for (let i = 0; i < steps.value; i++) {
-		output.push(toParse[i].y);
+		output.push(toFiniteNumber(toParse[i].y));
 	}
 	const toSum = toParse.splice(steps.value, toParse.length - steps.value);
 	let sum = 0;
-	toSum.forEach((element) => (sum += element.y));
+	toSum.forEach((element) => (sum += toFiniteNumber(element.y)));
 	output.push(sum);
 	return output;
 });
@@ -54,13 +60,40 @@ const parsedLabels = computed(() => {
 	return output;
 });
 const sum = computed(() => {
-	return Math.round(parsedSeries.value.reduce((a, b) => a + b) * 100) / 100;
+	return (
+		Math.round(
+			parsedSeries.value.reduce((a, b) => toFiniteNumber(a) + toFiniteNumber(b), 0) *
+				100
+		) / 100
+	);
 });
+
+const legendColors = computed(() => {
+	const baseColors = Array.isArray(props.chart_config?.color)
+		? props.chart_config.color
+		: [];
+	if (parsedLabels.value.length <= baseColors.length) {
+		return baseColors.slice(0, parsedLabels.value.length);
+	}
+	return [...baseColors, "#848c94"];
+});
+
+const donutLegendItems = computed(() =>
+	parsedLabels.value.map((label, index) => ({
+		label,
+		value: parsedSeries.value[index],
+		color: legendColors.value[index] || "#9ca3af",
+	})),
+);
 
 // chartOptions needs to be in the bottom since it uses computed data
 const chartOptions = ref({
 	chart: {
-		offsetY: 10,
+		offsetY: 0,
+		width: "100%",
+		height: "100%",
+		redrawOnParentResize: true,
+		redrawOnWindowResize: true,
 	},
 	colors:
 		props.series.length >= steps.value
@@ -163,6 +196,7 @@ function handleDataSelection(_e, _chartContext, config) {
   >
     <VueApexCharts
       width="100%"
+			height="100%"
       type="donut"
       :options="chartOptions"
       :series="parsedSeries"
@@ -172,6 +206,22 @@ function handleDataSelection(_e, _chartContext, config) {
       <h5>總合</h5>
       <h6>{{ sum }}</h6>
     </div>
+		<div
+			v-if="showColorLegend"
+			class="donutchart-legend"
+		>
+			<div
+				v-for="item in donutLegendItems"
+				:key="`legend-${item.label}`"
+				class="donutchart-legend-item"
+			>
+				<span
+					class="donutchart-legend-swatch"
+					:style="{ backgroundColor: item.color }"
+				/>
+				<span class="donutchart-legend-label">{{ item.label }}</span>
+			</div>
+		</div>
   </div>
 </template>
 
@@ -183,7 +233,14 @@ function handleDataSelection(_e, _chartContext, config) {
 	justify-content: center;
 	align-items: center;
 	position: relative;
-	overflow-y: visible;
+	overflow: hidden;
+
+	:deep(.vue-apexcharts),
+	:deep(.apexcharts-canvas),
+	:deep(.apexcharts-svg) {
+		width: 100% !important;
+		height: 100% !important;
+	}
 
 	&-title {
 		display: flex;
@@ -202,6 +259,43 @@ function handleDataSelection(_e, _chartContext, config) {
 			color: var(--color-complement-text);
 			font-size: var(--font-m);
 			font-weight: 400;
+		}
+	}
+
+	&-legend {
+		position: absolute;
+		left: 12px;
+		right: 12px;
+		bottom: 8px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+		align-items: center;
+		justify-content: center;
+		padding: 6px 10px;
+		border-radius: 10px;
+		background: rgba(2, 6, 23, 0.45);
+		backdrop-filter: blur(4px);
+		pointer-events: none;
+
+		&-item {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		&-swatch {
+			width: 10px;
+			height: 10px;
+			border-radius: 999px;
+			flex-shrink: 0;
+			border: 1px solid rgba(255, 255, 255, 0.3);
+		}
+
+		&-label {
+			color: rgba(226, 232, 240, 0.95);
+			font-size: 12px;
+			line-height: 1.2;
 		}
 	}
 }

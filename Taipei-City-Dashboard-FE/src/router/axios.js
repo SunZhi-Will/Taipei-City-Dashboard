@@ -46,11 +46,20 @@ http.interceptors.response.use(
 		const dialogStore = useDialogStore();
 		const authStore = useAuthStore();
 		const contentStore = useContentStore();
+		const status = error?.response?.status;
 
 		contentStore.error = true;
 		contentStore.loading = false;
 
-		switch (error.response.status) {
+		if (!status) {
+			dialogStore.showNotification(
+				"fail",
+				"網路異常或請求逾時，請稍後再試"
+			);
+			return Promise.reject(error);
+		}
+
+		switch (status) {
 			case 401:
 				if (authStore.token) {
 					dialogStore.showNotification(
@@ -88,7 +97,7 @@ http.interceptors.response.use(
 			default:
 				dialogStore.showNotification(
 					"fail",
-					`${error.response.status}，${error.response.data.message}`
+					`${status}，${error?.response?.data?.message || "動作無法完成"}`
 				);
 				break;
 		}

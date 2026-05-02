@@ -56,6 +56,26 @@ docker compose version
 
 ---
 
+## 📊 新增特定組件部署 (以雙北空品組件為例)
+
+當您需要將特定的「空品監測」等帶有地圖與資料庫查詢的組件部署到 Docker 環境時，請按照以下步驟：
+
+### 一鍵部署與同步
+在專案根目錄執行以下腳本，它會自動完成：元數據更新、資料庫建表、匯入模擬數據、生成地圖檔案、以及重啟前端。
+```bash
+bash ./migrations/run_deploy_air_quality.sh
+```
+
+### 手動同步地圖資料
+若您修改了資料庫中的測站位置或數值，需要手動同步至地圖檔案時：
+```bash
+# 生成 GeoJSON 並重啟前端識別
+bash ./migrations/export_air_quality_geojson.sh
+docker restart dashboard-fe
+```
+
+---
+
 ## 🔧 常見指令
 
 | 操作 | 快捷鍵 | 描述 |
@@ -98,43 +118,16 @@ docker compose version
 - 確認 Docker Desktop 已啟動
 - 如用 WSL docker，確認 Ubuntu 發行版已安裝
 
-### Q4: 登入失敗？
-**A：** 帳號密碼錯誤或資料庫未初始化
-- 預設帳號：`admin@admin.com` / `Admin1234!`
-- 若仍失敗，檢查 DB 初始化日誌：
-  ```bash
-  docker logs postgres-data --tail 20
-  ```
-
 ---
 
 ## 🛠️ 進階操作
 
-### 查看容器狀態
-```bash
-docker ps
-```
-
-### 查看服務日誌
-```bash
-docker logs dashboard-be --tail 50
-docker logs dashboard-fe --tail 50
-```
-
-### 進入容器命令行
-```bash
-docker exec -it dashboard-be /bin/sh
-```
-
-### 停止並清除所有容器
-```bash
-docker compose -f docker/docker-compose.yaml down -v
-```
-
-### 手動初始化資料庫
+### 手動初始化資料庫與遷移
 ```bash
 docker compose -f docker/docker-compose-db.yaml up -d
 docker compose -f docker/docker-compose-init.yaml up
+# 若只需跑特定的遷移資料：
+# docker compose -f docker/docker-compose-init.yaml up dashboard-be-init-migrations
 ```
 
 ---
@@ -145,15 +138,7 @@ docker compose -f docker/docker-compose-init.yaml up
 1. `.github/skills/infrastructure-deployment/SKILL.md` — 部署詳細指南
 2. `docker/.env` — 環境變數設定是否正確
 3. Docker Desktop 版本是否最新
-4. WSL 發行版狀態（若使用 WSL docker）
 
 ---
-
-## 📝 筆記
-
-- 首次部署主要耗時在 Docker 映像拉取
-- 改代碼不需重新部署前後端（熱重載已開啟）
-- 若修改後端代碼，需重啟 `dashboard-be` 容器
-- 資料庫異常時，宜先檢查日誌再清除 volumes
 
 **祝部署順利！🎉**

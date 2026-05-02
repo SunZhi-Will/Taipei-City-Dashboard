@@ -4,19 +4,37 @@
 
 <script setup>
 const { VITE_APP_TITLE } = import.meta.env;
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useFullscreen } from "@vueuse/core";
 import { useAuthStore } from "../../../store/authStore";
 import { useDialogStore } from "../../../store/dialogStore";
+import { useContentStore } from "../../../store/contentStore";
 
 import UserSettings from "../../dialogs/UserSettings.vue";
 import ContributorsList from "../../dialogs/ContributorsList.vue";
+import MobileDashboardSwitcher from "../../dialogs/MobileDashboardSwitcher.vue";
 
 const route = useRoute();
 const authStore = useAuthStore();
+const contentStore = useContentStore();
 const dialogStore = useDialogStore();
 const { isFullscreen, toggle } = useFullscreen();
+
+const isDropdownOpen = ref(false);
+
+const toggleDropdown = (state) => {
+  if (!(authStore.isMobileDevice && authStore.isNarrowDevice)) {
+    isDropdownOpen.value = false;
+    return;
+  }
+
+  if (state !== undefined) {
+    isDropdownOpen.value = state;
+  } else {
+    isDropdownOpen.value = !isDropdownOpen.value;
+  }
+};
 
 const linkQuery = computed(() => {
 	const { query } = route;
@@ -36,8 +54,11 @@ const isLocalhost = computed(() => {
 
 <template>
   <div class="navbar">
-    <a href="/">
-      <div class="navbar-logo">
+    <div class="navbar-logo">
+      <a
+        href="/"
+        class="navbar-logo-link"
+      >
         <div class="navbar-logo-image">
           <img
             src="../../../assets/images/TUIC.svg"
@@ -48,12 +69,32 @@ const isLocalhost = computed(() => {
           <h1>{{ VITE_APP_TITLE }}</h1>
           <h2>Taipei City Dashboard</h2>
         </div>
+      </a>
+      <div class="navbar-logo-titles">
+        <span class="navbar-theme-separator">/</span>
+        <div
+          class="navbar-theme-name"
+          :class="{ 'navbar-theme-name--active': isDropdownOpen }"
+          @click.stop="toggleDropdown()"
+        >
+          <span class="navbar-theme-icon material-icons-round">{{ contentStore.currentDashboard.icon }}</span>
+          <span class="navbar-theme-text">{{ contentStore.currentDashboard.name }}</span>
+          <span
+            v-if="authStore.isNarrowDevice"
+            class="navbar-theme-arrow material-icons-round"
+          >arrow_drop_down_circle</span>
+          
+          <!-- Immersive Mobile Menu Overlay (Extracted) -->
+          <MobileDashboardSwitcher 
+            v-if="authStore.isMobileDevice && authStore.isNarrowDevice"
+            :is-open="isDropdownOpen"
+            @close="toggleDropdown(false)"
+          />
+        </div>
       </div>
-    </a>
+    </div>
     <div
-      v-if="
-        authStore.currentPath !== 'admin'
-      "
+      v-if="authStore.currentPath !== 'admin'"
       class="navbar-tabs"
     >
       <router-link
@@ -79,6 +120,9 @@ const isLocalhost = computed(() => {
         }`"
       >
         地圖交叉比對
+      </router-link>
+      <router-link to="/ai-studio">
+        AI Studio
       </router-link>
     </div>
     <div class="navbar-user">
@@ -182,164 +226,282 @@ const isLocalhost = computed(() => {
 	border-bottom: 1px solid var(--color-border);
 	background-color: var(--color-component-background);
 	user-select: none;
+	position: relative;
+	z-index: 2001;
+	overflow: visible;
 
-	&-logo {
-		display: flex;
+    &-logo {
+      display: flex;
+      align-items: center;
 
-		h1 {
-			font-weight: 500;
-			
-			@media screen and (max-width: 500px) {
-				display: none;
-			}
-		}
+      &-link {
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        transition: opacity 0.2s;
 
-		h2 {
-			font-size: var(--font-s);
-			font-weight: 400;
+        &:hover {
+          opacity: 0.8;
+        }
+      }
 
-			@media screen and (max-width: 500px) {
-				display: none;
-			}
-		}
+      h1 {
+        font-weight: 500;
+        font-size: 1.15rem;
+        line-height: 1.1;
+        
+        @media screen and (max-width: 500px) {
+          display: none;
+        }
+      }
 
-		&-image {
-			width: 22.94px;
-			height: 45px;
-			margin: 0 var(--font-m);
+      h2 {
+        font-size: 0.7rem;
+        font-weight: 400;
+        color: var(--color-complement-text);
+        line-height: 1;
 
-			img {
-				height: 45px;
-				filter: invert(1);
-			}
-		}
-	}
+        @media screen and (max-width: 500px) {
+          display: none;
+        }
+      }
 
-	&-tabs {
-		display: flex;
+      &-image {
+        width: 22.94px;
+        height: 45px;
+        margin: 0 var(--font-m);
 
-		a {
-			height: 59px;
-			display: flex;
-			align-items: center;
-			margin-left: var(--font-s);
-			transition: opacity 0.2s, border-bottom 0.2s;
-			border-bottom: solid 3px transparent;
+        img {
+          height: 45px;
+          filter: invert(1);
+        }
+      }
 
-			&:hover {
-				opacity: 0.8;
-			}
-		}
+      &-titles {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
 
-		.router-link-active {
-			border-bottom: solid 3px var(--color-highlight);
-			color: var(--color-highlight);
+      &-theme-separator {
+        margin: 0 8px;
+        opacity: 0.5;
+        font-weight: 300;
 
-			&:hover {
-				opacity: 1;
-			}
-		}
+        @media screen and (max-width: 768px) {
+          display: none;
+        }
+      }
 
-		// @media screen and (max-width: 750px) {
-		// 	display: none;
-		// }
-		// @media screen and (max-height: 500px) {
-		// 	display: none;
-		// }
-	}
+      &-theme-name {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--font-s);
+        font-weight: 500;
+        color: var(--color-highlight);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 200px;
+        cursor: pointer;
+        
+        &:active {
+          opacity: 0.7;
+        }
 
-	&-user {
-		display: flex;
-		align-items: center;
+        @media screen and (max-width: 768px) {
+          max-width: 160px;
+          background: rgba(255, 255, 255, 0.08);
+          padding: 6px 10px;
+          border-radius: 8px;
+          min-height: 36px;
+        }
 
-		li a,
-		button {
-			display: flex;
-			align-items: center;
-			margin-right: var(--font-m);
-			padding: 2px 4px;
-			border-radius: 4px;
-			font-size: var(--font-m);
-			transition: background-color 0.25s;
-		}
+        @media screen and (max-width: 480px) {
+          max-width: 120px;
+          font-size: 0.85rem;
+        }
+      }
 
-		span {
-			font-family: var(--font-icon);
-			font-size: calc(var(--font-l) * var(--font-to-icon));
-		}
+      &-theme-icon {
+        font-size: calc(var(--font-m) * var(--font-to-icon));
+        display: flex;
+        align-items: center;
+      }
 
-		&-user:hover ul,
-		&-info:hover ul {
-			display: block;
-			opacity: 1;
-		}
+      &-theme-arrow {
+        font-size: 18px;
+        color: var(--color-highlight);
+        margin-left: 2px;
+        transition: transform 0.3s ease;
+      }
 
-		&-user,
-		&-info {
-			height: 60px;
-			min-width: 100px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
+      &-name--active {
+        .navbar-theme-arrow {
+          transform: rotate(180deg);
+        }
+      }
+    }
 
-			@media screen and (max-width: 750px) {
-				display: none;
-			}
-			@media screen and (max-height: 500px) {
-				display: none;
-			}
+    &-tabs {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: auto;
 
-			ul {
-				min-width: 100px;
-				display: none;
-				position: absolute;
-				right: 20px;
-				top: 55px;
-				padding: 8px;
-				border-radius: 5px;
-				background-color: rgb(85, 85, 85);
-				opacity: 0;
-				transition: opacity 0.25s;
-				z-index: 10;
+      a {
+        padding: 8px 20px;
+        display: flex;
+        align-items: center;
+        background: transparent;
+        color: var(--color-complement-text);
+        text-decoration: none;
+        font-size: var(--font-ms);
+        font-weight: 500;
+        border-radius: 999px;
+        white-space: nowrap;
+        transition: background 0.2s ease, color 0.2s ease;
 
-				li {
-					border-radius: 5px;
-					transition: background-color 0.25s;
+        &:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--color-text);
+        }
+      }
 
-					a,
-					button {
-						padding: 8px 6px;
-						width: 100%;
-						height: 100%;
-					}
-				}
+      .router-link-active {
+        background: rgba(255, 255, 255, 0.16);
+        color: #ffffff;
+        font-weight: 600;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 
-				li:hover {
-					background-color: var(--color-complement-text);
-				}
-			}
-		}
+        &:hover {
+          background: rgba(255, 255, 255, 0.16);
+        }
+      }
 
-		&-info {
-			min-width: 0;
+      /* AI Studio 特殊樣式 */
+      a[href*="ai-studio"],
+      a[href="/ai-studio"] {
+        &:not(.router-link-active) {
+          color: #c4b5fd;
 
-			ul {
-				right: 120px;
-				top: 55px;
-			}
+          &:hover {
+            background: rgba(139, 92, 246, 0.18);
+            color: #ddd6fe;
+          }
+        }
 
-			@media screen and (max-width: 750px) {
-				display: flex;
+        &.router-link-active {
+          background: rgba(124, 58, 237, 0.45);
+          color: #ede9fe;
+          box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.5);
+        }
+      }
 
-				ul {
-					right: 20px;
-					top: 55px;
-				}
-			}
-			@media screen and (max-height: 500px) {
-				display: flex;
-			}
-		}
-	}
+      @media screen and (max-width: 900px) {
+        display: none;
+      }
+    }
+
+    &-user {
+      display: flex;
+      align-items: center;
+
+      li a,
+      button {
+        display: flex;
+        align-items: center;
+        margin-right: var(--font-m);
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-size: var(--font-m);
+        transition: background-color 0.25s;
+      }
+
+      span {
+        font-family: var(--font-icon);
+        font-size: calc(var(--font-l) * var(--font-to-icon));
+      }
+
+      &-user:hover ul,
+      &-info:hover ul {
+        display: block;
+        opacity: 1;
+      }
+
+      &-user,
+      &-info {
+        height: 60px;
+        min-width: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        @media screen and (max-width: 750px) {
+          display: none;
+        }
+        @media screen and (max-height: 500px) {
+          display: none;
+        }
+
+        ul {
+          min-width: 100px;
+          display: none;
+          position: absolute;
+          right: 20px;
+          top: 55px;
+          padding: 8px;
+          margin: 0;
+          list-style: none;
+          border-radius: 5px;
+          background-color: rgb(85, 85, 85);
+          opacity: 0;
+          transition: opacity 0.25s;
+          z-index: 10;
+
+          li {
+            list-style: none;
+            border-radius: 5px;
+            transition: background-color 0.25s;
+
+            a,
+            button {
+              padding: 8px 6px;
+              width: 100%;
+              height: 100%;
+            }
+          }
+
+          li:hover {
+            background-color: var(--color-complement-text);
+          }
+        }
+      }
+
+      &-info {
+        min-width: 0;
+
+        ul {
+          right: 120px;
+          top: 55px;
+        }
+
+        @media screen and (max-width: 750px) {
+          display: flex;
+
+          ul {
+            right: 20px;
+            top: 55px;
+          }
+        }
+        @media screen and (max-height: 500px) {
+          display: flex;
+        }
+      }
+    }
 }
 </style>

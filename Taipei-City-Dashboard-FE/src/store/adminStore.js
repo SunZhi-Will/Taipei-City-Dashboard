@@ -43,6 +43,9 @@ export const useAdminStore = defineStore("admin", {
 		contributors: [],
 		contributorResults: 0,
 		currentContributor: null,
+		// AI KPI Stats (for /admin/ai-stats)
+		aiStats: null,
+		aiStatsDays: 30,
 	}),
 	actions: {
 		/* Utility functions to access loading and error states in contentStore */
@@ -56,6 +59,18 @@ export const useAdminStore = defineStore("admin", {
 		},
 		setRouteParams(city) {
 			this.currentCity = city;
+		},
+		async getAiStats(days = 30) {
+			this.setLoading(true);
+			try {
+				const response = await http.get(`/chatlog/stats?days=${days}`);
+				this.aiStats = response.data?.data || null;
+				this.aiStatsDays = days;
+			} catch (e) {
+				this.setError(true);
+			} finally {
+				this.setLoading(false);
+			}
 		},
 
 		/* Dashboard */

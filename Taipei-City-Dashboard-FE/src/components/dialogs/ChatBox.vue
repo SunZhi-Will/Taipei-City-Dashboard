@@ -1,34 +1,89 @@
 <script setup>
-import { ref, watch, nextTick } from "vue";
+import { ref, watch, nextTick, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
-import SendIcon from "../icons/SendIcon.vue";
 import BotLogo from "../icons/BotLogo.vue";
-import UserLogo from "../icons/UserLogo.vue";
+import ChatResultComponents from "./ChatResultComponents.vue";
+import ChatComposer from "./chat/ChatComposer.vue";
+import ChatHeader from "./chat/ChatHeader.vue";
+import ChatStickyNotice from "./chat/ChatStickyNotice.vue";
+import SuggestedTagsBar from "./chat/SuggestedTagsBar.vue";
 
 import { useChatStore } from "../../store/chatStore";
 import { useContentStore } from "../../store/contentStore";
 import { useAuthStore } from "../../store/authStore";
 import http from "../../router/axios";
 
+const props = defineProps({
+	showCloseButton: {
+		type: Boolean,
+		default: false,
+	},
+});
+
+const emit = defineEmits(["close", "expand"]);
+
 const chatStore = useChatStore();
 const contentStore = useContentStore();
 const authStore = useAuthStore();
-const { addChatData, addQueryData, saveChatLog } = chatStore;
+const router = useRouter();
+const { addChatData, addQueryData, saveChatLog, clearChatHistory } = chatStore;
 const { createDashboard } = contentStore;
-const { chatData } = storeToRefs(chatStore);
+const { chatData, isResponding } = storeToRefs(chatStore);
 const { editDashboard } = storeToRefs(contentStore);
 const { user } = storeToRefs(authStore);
 
 const userMessage = ref("");
 const chatAreaRef = ref(null);
 const isStickyOpen = ref(false);
+const isExpanded = ref(false);
 const dashboardCreationLoading = ref(false);
+const tagsRefreshKey = ref(0);
 
+// === 建議 Tags ===
+const DEFAULT_TAGS = [
+	"空氣品質", "交通壅塞", "捷運人流", "垃圾清運", "醫療資源", "老年人口",
+];
+
+const suggestedTags = ref([...DEFAULT_TAGS]);
+
+// 點擊 tag 直接送出
+const clickTag = async (tag) => {
+	if (isResponding.value) return;
+	await addQueryData({ role: "user", content: tag });
+};
+
+// bot 回覆後，根據內容動態更新相關 tags
+watch(
+	chatData,
+	(newVal) => {
+		const lastBot = [...newVal].reverse().find((m) => m.role === "bot" && !m.isDefault);
+		if (!lastBot) return;
+		const content = (lastBot.content || "") + (lastBot.components?.map((c) => c.name).join(" ") || "");
+		const contextMap = [
+			{ keywords: ["空氣", "PM2.5", "AQI", "污染"], tags: ["PM2.5 即時", "空氣品質指標", "各站空品"] },
+			{ keywords: ["交通", "車流", "速率", "壅塞"], tags: ["路口車流量", "公車即時", "停車場資訊"] },
+			{ keywords: ["捷運", "MRT", "地鐵"], tags: ["捷運進出站", "各線人流", "延誤查詢"] },
+			{ keywords: ["垃圾", "清運", "廢棄物", "回收"], tags: ["垃圾清運量", "資源回收率", "廚餘處理"] },
+			{ keywords: ["老年", "老化", "長照", "扶養"], tags: ["老化指數", "長照資源", "社福補助"] },
+			{ keywords: ["醫療", "醫院", "診所", "救護"], tags: ["醫院分布", "AED 位置", "119 統計"] },
+			{ keywords: ["水", "用水", "降雨", "水庫"], tags: ["水庫蓄水率", "降雨量統計", "淹水警戒"] },
+			{ keywords: ["電", "用電", "能源", "再生"], tags: ["用電量統計", "太陽能發電", "碳排放量"] },
+		];
+		for (const rule of contextMap) {
+			if (rule.keywords.some((k) => content.includes(k))) {
+				suggestedTags.value = [...rule.tags, ...DEFAULT_TAGS.filter((t) => !rule.tags.includes(t)).slice(0, 3)];
+				return;
+			}
+		}
+		suggestedTags.value = [...DEFAULT_TAGS];
+	},
+	{ deep: true },
+);
 const qaBtnHandler = async (text, relations) => {
 	if (text === "建立儀表板") {
 		if (dashboardCreationLoading.value === true) return;
 		dashboardCreationLoading.value = true;
-		// 確認個人儀表板是否超過20個
 		const response = await http.get(`/dashboard/`);
 		if (response.data?.data?.personal?.length > 20) {
 			addChatData({
@@ -39,7 +94,8 @@ const qaBtnHandler = async (text, relations) => {
 			dashboardCreationLoading.value = false;
 			return;
 		}
-		const components = Array.from(new Set(relations.map((r) => r.id))).map(
+		const safeRelations = Array.isArray(relations) ? relations : [];
+		const components = Array.from(new Set(safeRelations.map((r) => r.id))).map(
 			(id) => ({ id }),
 		);
 
@@ -48,7 +104,7 @@ const qaBtnHandler = async (text, relations) => {
 				index: "",
 				name: "推薦儀表板",
 				icon: "star",
-				components: components,
+				components,
 			};
 			await createDashboard();
 			saveChatLog("建立儀表板", "使用者成功建立儀表板!");
@@ -62,61 +118,190 @@ const qaBtnHandler = async (text, relations) => {
 	}
 };
 
-const sendBtnHandler = (text) => {
-	if (!text.trim()) return;
-	addQueryData({
-		role: "user",
-		content: text,
-	});
+const sendBtnHandler = async () => {
+	if (isResponding.value) return;
+	const normalizedText = userMessage.value.trim();
+	if (!normalizedText) return;
 	userMessage.value = "";
+	await addQueryData({
+		role: "user",
+		content: normalizedText,
+	});
 };
 
-const toggleSticky = () => {
-	isStickyOpen.value = !isStickyOpen.value;
+const closeWidget = () => {
+	emit("close");
 };
+
+const toggleExpand = () => {
+	isExpanded.value = !isExpanded.value;
+	emit("expand", isExpanded.value);
+	tagsRefreshKey.value += 1;
+};
+
+const clearChat = () => {
+	if (confirm("確定要清除所有聊天紀錄並開新的 Chat 嗎？")) {
+		clearChatHistory();
+	}
+};
+
+const copyToClipboard = async (text) => {
+	if (!text) return;
+	try {
+		await navigator.clipboard.writeText(text);
+	} catch (err) {
+		console.error("複製失敗:", err);
+	}
+};
+
+const handleExploreIndicator = async (indicatorName) => {
+	if (isResponding.value || !indicatorName) return;
+	await addQueryData({ role: "user", content: indicatorName });
+};
+
+const handleOpenMap = async (component) => {
+	const mapConfig = component?.dashboardConfig?.map_config;
+	if (!Array.isArray(mapConfig) || mapConfig.length === 0 || !mapConfig[0]) return;
+
+	const city = component?.dashboardConfig?.city || contentStore.currentDashboard?.city || "taipei";
+	const index = `map-layers-${city}`;
+	const openComponentId = component?.dashboardConfig?.id;
+
+	await router.push({
+		name: "mapview",
+		query: {
+			index,
+			city,
+			openTrigger: String(Date.now()),
+			...(openComponentId ? { openComponentId: String(openComponentId) } : {}),
+		},
+	});
+};
+
+
+
+const scrollToBottom = async () => {
+	await nextTick();
+	const chat = chatAreaRef.value;
+	if (!chat) return;
+	chat.scrollTop = chat.scrollHeight - chat.clientHeight;
+};
+
+const renderContent = (content) => {
+	if (!content) return "";
+	
+	const lines = content.split('\n');
+	let inTable = false;
+	let result = [];
+	let tableRows = [];
+
+	const generateTableHtml = (rows) => {
+		if (rows.length === 0) return "";
+		let html = '<div class="ai-table-wrapper"><table class="ai-table">';
+		rows.forEach((row, index) => {
+			if (index === 0) html += '<thead>';
+			if (index === 1) html += '<tbody>';
+			
+			// 恢復所有列，並進行必要的顯示名稱轉換
+			html += '<tr>';
+			row.forEach((cell, cellIdx) => {
+				const tag = index === 0 ? 'th' : 'td';
+				let displayCell = cell;
+				// 轉換城市名（僅限城市名稱欄位）
+				if (cellIdx === 1) {
+					if (cell === 'metrotaipei') displayCell = '雙北';
+					if (cell === 'taipei') displayCell = '臺北';
+				}
+				html += `<${tag}>${displayCell}</${tag}>`;
+			});
+			html += '</tr>';
+			
+			if (index === 0) html += '</thead>';
+		});
+		if (rows.length > 1) html += '</tbody>';
+		html += '</table></div>';
+		return html;
+	};
+
+	for (let line of lines) {
+		const trimmed = line.trim();
+		if (trimmed.startsWith('|') && (trimmed.includes('|') || trimmed.endsWith('|'))) {
+			if (!inTable) {
+				inTable = true;
+				tableRows = [];
+			}
+			const cells = trimmed.split('|').map(c => c.trim()).filter((c, i, arr) => i > 0 && i < arr.length - 1);
+			if (trimmed.includes('---')) continue;
+			if (cells.length > 0) {
+				tableRows.push(cells);
+			}
+		} else {
+			if (inTable) {
+				result.push(generateTableHtml(tableRows));
+				inTable = false;
+			}
+			if (trimmed) {
+				result.push(`<p>${line}</p>`);
+			}
+		}
+	}
+	if (inTable) result.push(generateTableHtml(tableRows));
+	
+	return result.join('');
+};
+
+onMounted(() => {
+	scrollToBottom();
+});
 
 watch(
 	() => chatData.value.length,
 	async () => {
-		await nextTick();
-		const chat = chatAreaRef.value;
-		if (!chat) return;
-		chat.scrollTop = chat.scrollHeight - chat.clientHeight;
+		scrollToBottom();
 	},
 	{ deep: true },
 );
 </script>
 
 <template>
-  <div class="chat-widget">
-    <!-- 標題 -->
-    <div class="header">
-      <h3>臺北城市儀表板小幫手</h3>
-    </div>
+  <div
+    id="chat-widget-panel"
+    class="chat-widget"
+    role="dialog"
+    aria-label="臺北城市儀表板小幫手"
+    tabindex="-1"
+  >
+    <ChatHeader
+      :show-close-button="props.showCloseButton"
+      @clear="clearChat"
+      @expand="toggleExpand"
+      @close="closeWidget"
+    />
 
     <!-- 聊天區 -->
     <div
       ref="chatAreaRef"
       class="chat-area scrollbar-custom"
+      role="log"
+      aria-live="polite"
+      aria-label="對話紀錄"
     >
-      <!-- 置頂訊息 -->
-      <div class="chat-message sticky-message">
+      <ChatStickyNotice v-model="isStickyOpen" />
+      <div
+        v-if="chatData.length === 0 && !isResponding"
+        class="empty-state"
+      >
         <div
-          class="sticky-header"
-          @click="toggleSticky"
+          class="empty-icon"
+          aria-hidden="true"
         >
-          <span>置頂公告：小幫手使用須知</span>
-          <button class="toggle-btn">
-            {{ isStickyOpen ? "-" : "+" }}
-          </button>
+          <svg viewBox="0 0 16 16">
+            <path d="M5 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2" />
+          </svg>
         </div>
-        <div
-          v-show="isStickyOpen"
-          class="sticky-body"
-        >
-          <span>小幫手會依據您輸入的內容，自動檢索本站臺的組件資料庫，並回傳相似度較高的組件清單，協助您快速找到符合需求的元件或資訊。<br><br>
-            目前小幫手僅提供組件比對與分析服務，不支援一般聊天功能。如造成不便，敬請見諒！</span>
-        </div>
+        <p class="empty-text">
+          您好！請輸入想查詢的城市議題，我會協助推薦相關組件與說明。
+        </p>
       </div>
       <div
         v-for="chat in chatData"
@@ -128,50 +313,20 @@ watch(
           v-if="chat.role === 'bot'"
           class="bot"
         >
-          <div class="avatar">
-            <BotLogo />
-          </div>
           <div class="content">
             <div
               v-if="chat.content"
-              class="message--bubble"
+              class="message--plain message--markdown"
+              v-html="renderContent(chat.content)"
             >
-              <p>{{ chat.content }}</p>
             </div>
-            <!-- 表格區 -->
-            <div
-              v-if="chat.relations"
-              v-horizontal-wheel
-              class="relation-area"
-            >
-              <table class="relation-table">
-                <thead>
-                  <tr>
-                    <th>排名</th>
-                    <th>城市名</th>
-                    <th>組件名</th>
-                    <th>關聯性</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(item, index) in chat.relations"
-                    :key="index"
-                  >
-                    <td>{{ index + 1 }}</td>
-                    <td>
-                      {{
-                        item.city === "taipei"
-                          ? "臺北"
-                          : "雙北"
-                      }}
-                    </td>
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.score }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <ChatResultComponents
+              v-if="chat.components && chat.components.length > 0"
+              :components="chat.components"
+              @copy="copyToClipboard"
+              @explore="handleExploreIndicator"
+              @open-map="handleOpenMap"
+            />
             <div
               v-if="chat.button"
               v-horizontal-wheel
@@ -192,9 +347,6 @@ watch(
           v-else
           class="user"
         >
-          <div class="avatar">
-            <UserLogo />
-          </div>
           <div
             v-if="chat.content"
             class="content"
@@ -205,35 +357,58 @@ watch(
           </div>
         </div>
       </div>
+      <div
+        v-if="isResponding"
+        class="responding-state"
+      >
+        <div class="avatar">
+          <BotLogo />
+        </div>
+        <div
+          class="typing-dots"
+          aria-label="小幫手回應中"
+        >
+          <span class="typing-dot" />
+          <span class="typing-dot" />
+          <span class="typing-dot" />
+        </div>
+      </div>
     </div>
 
-    <!-- 輸入區 -->
-    <div class="input-area">
-      <input
-        v-model="userMessage"
-        type="text"
-        placeholder="輸入訊息..."
-        @keyup.enter="sendBtnHandler(userMessage)"
-      >
-      <button @click="sendBtnHandler(userMessage)">
-        <SendIcon />
-      </button>
-    </div>
+    <SuggestedTagsBar
+      v-if="!isResponding && suggestedTags.length > 0"
+      :tags="suggestedTags"
+      :refresh-key="tagsRefreshKey"
+      @select="clickTag"
+    />
+    <ChatComposer
+      v-model="userMessage"
+      :is-responding="isResponding"
+      @send="sendBtnHandler"
+    />
   </div>
 </template>
 
 <style lang="scss" scoped>
-/* === 變數設定 === */
-$bg-dark: #090909;
-$panel-bg: #494b4e;
-$card-bg: #282a2c;
-$border-color: #888787;
-$input-bg: #d9d9d9;
+/* === 色彩系統（對齊 AIChatHub Widget） === */
+$bg-dark: #18191d;
+$card-bg: #252a2f;
+$border-color: #353a41;
+$border-hover: rgba(255, 255, 255, 0.2);
 $white: #ffffff;
-$scroll-thumb-hover: #ababab;
+$text-primary: #f4f4f5;
+$text-secondary: #d0d0d8;
+$text-muted: #a1a1aa;
+$scroll-thumb-hover: #505560;
+
+/* === 圓角系統 === */
+$radius-8: 8px;
 $radius-10: 10px;
-$radius-15: 15px;
-$radius-20: 20px;
+
+/* === 動畫標準 === */
+$transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+/* === 尺寸標準 === */
 
 /* === Scrollbar === */
 .scrollbar-x-hide {
@@ -262,149 +437,174 @@ $radius-20: 20px;
 
 /* === 主要樣式 === */
 .chat-widget {
-	width: 400px;
-	border-radius: $radius-20;
+	width: 420px;
+	max-width: 100%;
+	height: 100%;
+	border-radius: 16px;
 	overflow: hidden;
+	position: relative;
 	background: $bg-dark;
 	border: 1px solid $border-color;
 	display: flex;
 	flex-direction: column;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+	color: #18181b;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.16);
 
-	.header {
-		padding: 1rem;
-		background: $panel-bg;
-		border-bottom: 3px solid $border-color;
+	&, * {
+		box-sizing: border-box;
+	}
 
-		h3 {
-			font-size: 18px;
-			font-weight: 700;
-			color: $white;
-			margin: 0;
-		}
+	:where(div, p, span, button, table, thead, tbody, tr, th, td, svg, path) {
+		overflow: visible;
 	}
 
 	.chat-area {
 		flex: 1;
-		margin: 0.25rem;
-		padding: 0.75rem;
+		min-height: 0;
+		padding: 0 0 8.75rem;
 		overflow-y: auto;
+		overflow-x: hidden;
 		background: $bg-dark;
+		color: $white;
 
-		.chat-message {
-			padding: 4px 10px;
-			margin: 0px 8px;
-			border-radius: 8px;
-			background-color: $bg-dark;
+		.empty-state {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			text-align: center;
+			padding: 1.5rem 1.25rem;
+			margin: 0 1rem;
+			min-height: 180px;
+			animation: fadeIn 0.3s ease-out;
 		}
 
-		// 置頂訊息
-		.sticky-message {
-			border: 1px solid #ffffff;
-			position: sticky;
-			top: 0;
-			z-index: 10;
+		.empty-icon {
+			width: 48px;
+			height: 48px;
+			color: #909099;
+			margin-bottom: 1rem;
+			animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 
-			.sticky-header {
-				display: flex;
-				font-weight: bold;
-				justify-content: space-between;
-				align-items: center;
-				cursor: pointer;
-				padding: 8px 12px;
+			svg {
+				width: 100%;
+				height: 100%;
+				fill: currentColor;
 			}
+		}
 
-			.sticky-body {
-				padding: 8px 12px;
-				font-weight: 400;
-				font-size: 14px;
-			}
-
-			.toggle-btn {
-				background: none;
-				border: none;
-				font-size: 14px;
-				cursor: pointer;
-				color: #ffffff;
-			}
+		.empty-text {
+			font-size: 14px;
+			line-height: 1.5;
+			color: $text-muted;
+			margin: 0;
 		}
 
 		.message {
-			padding: 8px;
+			padding: 0.75rem 1rem;
+			animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+			margin-bottom: 0.25rem;
+			transition: $transition-fast;
 
 			.bot,
 			.user {
 				display: flex;
-				gap: 0.5rem;
+				gap: 0.25rem;
 				align-items: flex-start;
+				width: 100%;
 
 				&.user {
-					flex-direction: row-reverse;
-				}
-
-				.avatar {
-					width: 40px;
-					height: 40px;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					flex-shrink: 0;
-
-					svg {
-						width: 100%;
-						height: auto;
-					}
+					justify-content: flex-end;
 				}
 
 				.content {
 					display: flex;
 					flex-direction: column;
 					gap: 0.5rem;
+					max-width: 100%;
+					flex: 1;
+					width: 100%;
+					min-width: 0;
 
-					.relation-area {
+					.message--plain {
 						width: 100%;
-						display: flex;
-						align-items: center;
-						margin-top: 8px;
-						margin-bottom: 8px;
-
-						.relation-table {
-							min-width: max-content;
-							font-size: 13px;
+						&.message--markdown {
+							display: block;
+							width: 100%;
+							:deep(p) { margin: 0 0 0.5rem 0; width: 100%; }
+							:deep(.ai-table-wrapper) {
+								margin: 12px 0;
+								inline-size: 100% !important;
+								max-inline-size: 100% !important;
+								width: 100% !important;
+								display: block;
+								overflow-x: auto;
+								border-radius: 8px;
+								border: 1px solid rgba(255,255,255,0.1);
+								background: rgba(255,255,255,0.03);
+								box-sizing: border-box;
+							}
+							:deep(.ai-table) {
+								display: table;
+								width: 100% !important;
+								min-width: 100% !important;
+								max-width: 100%;
+								border-collapse: collapse;
+								border: 1px solid rgba(255,255,255,0.28);
+								font-size: 13px;
+								text-align: left;
+								table-layout: fixed;
+								box-sizing: border-box;
+								th, td {
+									padding: 10px 12px;
+									border: 1px solid rgba(255,255,255,0.22);
+									word-break: break-word;
+									text-align: left;
+								}
+								th:nth-child(1), td:nth-child(1) {
+									width: 56px;
+									white-space: nowrap;
+									text-align: left;
+								} /* 排名欄最小寬 */
+								th:nth-child(2), td:nth-child(2) {
+									width: 84px;
+									white-space: nowrap;
+								} /* 城市欄維持緊湊 */
+								th:last-child, td:last-child { width: calc(100% - 140px); } /* 主要內容欄吃滿剩餘寬度 */
+								th {
+									background: rgba(255,255,255,0.09);
+									font-weight: 600;
+									color: $white;
+								}
+								tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+							}
 						}
-
-						.relation-table th,
-						.relation-table td {
-							border: 1px solid #ccc;
-							text-align: left;
-							padding: 0px 8px;
-							line-height: 1.1;
-							vertical-align: middle;
-						}
-
-						.relation-table td {
-							height: 2.5rem;
-						}
-
-						.relation-table th {
-							font-weight: bold;
-							text-align: center;
+						p {
+							color: $text-secondary;
+							white-space: pre-line;
+							margin: 0;
+							padding: 0;
+							font-size: 14px;
+							line-height: 1.7;
 						}
 					}
 
 					.message--bubble {
-						border: 1px solid $white;
-						border-radius: $radius-10;
-						background: $card-bg;
+						display: inline-block;
+						max-width: 100%;
+						border: none;
+						border-radius: 1rem;
+						background: #6b7280;
+						box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 
 						p {
 							color: $white;
 							white-space: pre-line;
 							margin: 0;
-							padding-top: 8px;
-							padding-bottom: 8px;
-							padding-left: 16px;
-							padding-right: 16px;
-							font-size: 16px;
+							padding: 0.75rem 1rem;
+							font-size: 14px;
+							line-height: 1.55;
 						}
 					}
 
@@ -414,58 +614,148 @@ $radius-20: 20px;
 						overflow-x: auto;
 
 						button {
-							flex-shrink: 0;
-							background: $panel-bg;
-							color: $white;
-							font-size: 14px;
-							padding: 0.5rem 1rem;
-							border-radius: $radius-15;
-							border: none;
-							cursor: pointer;
+							padding: 0.5rem 0.875rem;
+							border-radius: $radius-10;
+							border: 1px solid $border-color;
+							background: $card-bg;
+							color: $text-primary;
+							font-size: 13px;
+							font-weight: 500;
 							white-space: nowrap;
+							cursor: pointer;
+							transition: $transition-fast;
 
 							&:hover {
-								filter: brightness(0.5);
+								background: rgba($white, 0.08);
+								border-color: $border-hover;
+								filter: brightness(1.12);
+								transform: scale(1.02);
+							}
+
+							&:active {
+								transform: scale(0.98);
 							}
 						}
 					}
 				}
 			}
-		}
-	}
 
-	.input-area {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		padding: 1.5rem 1.125rem;
-		background: $panel-bg;
-
-		input[type="text"] {
-			background: $white;
-			height: 35px;
-			width: 100%;
-			border-radius: 20px;
-			padding: 0 1rem;
-			border: none;
-			outline: none;
-			color: black;
+			.user {
+				.content {
+					max-width: 32rem;
+					width: auto;
+					flex: 0 1 auto;
+					align-items: flex-end;
+				}
+			}
 		}
 
-		button {
-			height: 35px;
+		.responding-state {
 			display: flex;
 			align-items: center;
-			justify-content: center;
-			background: transparent;
-			border: none;
-			cursor: pointer;
+			gap: 0.5rem;
+			padding: 0.75rem 1rem;
+			font-size: 13px;
+			color: #909099;
+			opacity: 0.85;
 
-			&:hover {
-				filter: brightness(0.5);
+			.avatar {
+				width: 28px;
+				height: 28px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+
+				svg {
+					width: 100%;
+					height: auto;
+				}
+			}
+
+			.typing-dots {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				padding: 8px 0;
+			}
+
+			.typing-dot {
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				background: #7a7a88;
+				animation: chat-typing-bounce 1.4s infinite ease-in-out;
+			}
+
+			.typing-dot:nth-child(1) {
+				animation-delay: 0s;
+			}
+
+			.typing-dot:nth-child(2) {
+				animation-delay: 0.2s;
+			}
+
+			.typing-dot:nth-child(3) {
+				animation-delay: 0.4s;
 			}
 		}
 	}
+
 }
+
+@media (max-width: 768px) {
+  .chat-widget {
+    border-radius: 12px;
+
+		.chat-area {
+			padding-bottom: 9.75rem;
+		}
+  }
+}
+
+@keyframes chat-msg-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes scaleIn {
+	from {
+		opacity: 0;
+		transform: scale(0.8);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes chat-typing-bounce {
+	0%,
+	60%,
+	100% {
+		transform: translateY(0);
+		opacity: 0.7;
+	}
+	30% {
+		transform: translateY(-10px);
+		opacity: 1;
+	}
+}
+
 </style>

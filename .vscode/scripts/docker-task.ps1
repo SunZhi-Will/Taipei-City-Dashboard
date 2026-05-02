@@ -45,27 +45,36 @@ function Use-WindowsDocker {
         if (-not $isInit) {
             Write-Host "INFO: First-time setup detected. Running bootstrap..." -ForegroundColor Cyan
             & $DockerCmd compose -f docker-compose-db.yaml up -d
-            Start-Sleep -Seconds 5
+            Start-Sleep -Seconds 8
             & $DockerCmd compose -f docker-compose-init.yaml up
         }
+        Write-Host "INFO: Starting database services..." -ForegroundColor Cyan
         & $DockerCmd compose -f docker-compose-db.yaml up -d
-        & $DockerCmd compose -f docker-compose.yaml up -d --build dashboard-be
+        Write-Host "INFO: Waiting for database services to be ready (15 seconds)..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 15
+        Write-Host "INFO: Starting application services..." -ForegroundColor Cyan
         & $DockerCmd compose -f docker-compose.yaml up -d
+        Start-Sleep -Seconds 3
         Write-Host ""
         Write-Host "OK: Services started. Check status below:" -ForegroundColor Green
         & $DockerCmd compose -f docker-compose.yaml ps
+        & $DockerCmd compose -f docker-compose-db.yaml ps
         return
     }
 
     if ($ActionName -eq 'bootstrap-full') {
+        Write-Host "INFO: Running full bootstrap..." -ForegroundColor Cyan
         & $DockerCmd compose -f docker-compose-db.yaml up -d
-        Start-Sleep -Seconds 5
+        Write-Host "INFO: Waiting for database services to be ready (15 seconds)..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 15
         & $DockerCmd compose -f docker-compose-init.yaml up
-        & $DockerCmd compose -f docker-compose.yaml up -d --build dashboard-be
-        & $DockerCmd compose -f docker-compose.yaml up -d
+        Write-Host "INFO: Starting application services..." -ForegroundColor Cyan
+        & $DockerCmd compose -f docker-compose.yaml up -d --build
+        Start-Sleep -Seconds 3
         Write-Host ""
         Write-Host "OK: Bootstrap complete. Services started:" -ForegroundColor Green
         & $DockerCmd compose -f docker-compose.yaml ps
+        & $DockerCmd compose -f docker-compose-db.yaml ps
         return
     }
 
@@ -102,9 +111,9 @@ function Use-WSLDocker {
         $isInit = (& wsl.exe -d $Distro sh -lc "docker volume ls --format '{{.Name}}' | grep -x 'postgres_data' >/dev/null; echo `$?").Trim()
         if ($isInit -ne '0') {
             Write-Host "INFO: First-time setup detected. Running bootstrap..." -ForegroundColor Cyan
-            & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard"
+            & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations"
         }
-        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && docker compose -f docker-compose.yaml up -d --build dashboard-be && docker compose -f docker-compose.yaml up -d"
+        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && docker compose -f docker-compose.yaml up -d"
         Write-Host ""
         Write-Host "OK: Services started. Check status below:" -ForegroundColor Green
         & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose.yaml ps"
@@ -112,7 +121,7 @@ function Use-WSLDocker {
     }
 
     if ($ActionName -eq 'bootstrap-full') {
-        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose.yaml up -d --build dashboard-be && docker compose -f docker-compose.yaml up -d"
+        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations && docker compose -f docker-compose.yaml up -d --build dashboard-be && docker compose -f docker-compose.yaml up -d"
         Write-Host ""
         Write-Host "OK: Bootstrap complete. Services started:" -ForegroundColor Green
         & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose.yaml ps"

@@ -52,6 +52,7 @@ type TWCCConfig struct {
 	Timeout       int
 	MaxRetry      int
 	MaxConcurrent int
+	MaxToolLoops  int
 }
 
 var (
@@ -120,6 +121,7 @@ var (
 		Timeout:       getIntEnv("TWCC_TIMEOUT", 60),
 		MaxRetry:      getIntEnv("TWCC_MAX_RETRY", 2),
 		MaxConcurrent: getIntEnv("TWCC_MAX_CONCURRENT", 100),
+		MaxToolLoops:  getIntEnv("TWCC_MAX_TOOL_LOOPS", 5),
 	}
 	
 	LMSession *ort.DynamicSession[int64, float32]

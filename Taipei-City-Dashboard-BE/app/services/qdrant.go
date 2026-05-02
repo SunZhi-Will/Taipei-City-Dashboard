@@ -62,6 +62,9 @@ func RebuildQdrantPublicCollection() ([]models.QuertChartAndConponentForQdrant, 
 	// 3. Recreate Qdrant collection
 	collectionName := os.Getenv("QDRANT_COLLECTION_NAME")
 	if collectionName == "" {
+		collectionName = global.Qdrant.Collection
+	}
+	if collectionName == "" {
 		collectionName = "query_charts" // Default collection name
 	}
 

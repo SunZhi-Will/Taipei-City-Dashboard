@@ -22,6 +22,7 @@ description: "Use when: 新增或修改 Copilot Skill/Instruction/Agent 設定�
 5. 新增/修改 Skill 後，必須同步更新 `.github/skills/README.md` 的入口導航。
 6. 若使用者要求文件化，需同步更新 `user-added/2026-this-year/docs/` 的入口與報告。
 7. 預設不可修改官方文件（如 `.github/CONTRIBUTING.md`、根目錄 `README.md`）；除非使用者明確要求。
+8. 每次實作修正後，必須同步新增 `user-added/log/YYYY-MM-DD/HHmm-標題.md`，且內容需包含時間、change type、驗證結果、可追溯資訊與技術細節（如適用），供使用者核對本次變更內容。
 
 ## Edit Boundary
 
@@ -29,6 +30,7 @@ description: "Use when: 新增或修改 Copilot Skill/Instruction/Agent 設定�
 	- `.github/skills/**`
 	- `.github/instructions/**`
 	- `user-added/2026-this-year/docs/**`
+	- `user-added/log/**`
 - 預設禁止修改:
 	- `.github/CONTRIBUTING.md`
 	- `README.md`
@@ -43,6 +45,8 @@ description: "Use when: 新增或修改 Copilot Skill/Instruction/Agent 設定�
 - [ ] `applyTo` 不過寬
 - [ ] `.github/skills/README.md` 已同步
 - [ ] 若有文件需求，`user-added/2026-this-year/docs/` 已同步
+- [ ] 每次修正皆已新增 `user-added/log/YYYY-MM-DD/HHmm-標題.md` 條目，且內容含 change type、驗證、traceability
+- [ ] 技術修正已補齊 technical-details、performance-impact、regression-test 等深度欄位
 
 ## Anti-Patterns
 

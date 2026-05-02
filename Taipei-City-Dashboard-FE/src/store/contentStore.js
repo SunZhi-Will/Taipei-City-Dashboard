@@ -16,9 +16,15 @@ import { useDialogStore } from "./dialogStore";
 import { useAuthStore } from "./authStore";
 import { getComponentDataTimeframe } from "../assets/utilityFunctions/dataTimeframe";
 import { CityManager } from "../dashboardComponent/utilities/cityManager";
+import {
+	isOfficialComponent,
+	isOfficialDashboard,
+} from "../constants/nonOfficialComponentIndexes";
 
 export const useContentStore = defineStore("content", {
 	state: () => ({
+		// countdown to next chart data update (seconds)
+		timeToUpdate: 600,
 		// cityManager is used to manage city settings. (tag, select, sidebar, mobileNavigation etc.)
 		cityManager: new CityManager(),
 		// Stores all dashboards data. (used in /dashboard, /mapview)
@@ -161,11 +167,13 @@ export const useContentStore = defineStore("content", {
 			this.dashboards.clear();
 
 			Object.entries(data).forEach(([key, dashboardArray]) => {
+				const filteredDashboards = Array.isArray(dashboardArray)
+					? dashboardArray.filter(isOfficialDashboard)
+					: [];
+
 				// deal with personal dashboard
 				if (key === "personal") {
-					this.personalDashboards = Array.isArray(dashboardArray)
-						? dashboardArray
-						: [];
+					this.personalDashboards = filteredDashboards;
 
 					if (this.personalDashboards.length !== 0) {
 						this.favorites = this.personalDashboards.find(
@@ -177,11 +185,11 @@ export const useContentStore = defineStore("content", {
 					}
 				} else if (this.cityManager.isCityEnabled(key)) {
 					// deal with other city dashboard
-					if (Array.isArray(dashboardArray)) {
+					if (filteredDashboards.length > 0) {
 						// move map-layers to the end
 						this.dashboards.set(
 							key,
-							this.moveMapLayersToEnd(dashboardArray),
+							this.moveMapLayersToEnd(filteredDashboards),
 						);
 					} else {
 						this.dashboards.set(key, []);
@@ -289,7 +297,9 @@ export const useContentStore = defineStore("content", {
 				const response = await http.get(
 					`/dashboard/${this.currentDashboard.index}`,
 				);
-				this.cityDashboard.components = response.data.data || [];
+				this.cityDashboard.components = (response.data.data || []).filter(
+					isOfficialComponent,
+				);
 				this.filterCurrentDashboardContent();
 			} catch (error) {
 				console.error("Error getting dashboard index data:", error);
@@ -766,9 +776,12 @@ export const useContentStore = defineStore("content", {
 					const mapLayersData = responses.flatMap(
 						(response) => response.data.data || [],
 					);
+					const officialMapLayersData = mapLayersData.filter(
+						isOfficialComponent,
+					);
 
 					// Filter out duplicate map layers based on id and city
-					const filteredMapLayersData = mapLayersData.filter(
+					const filteredMapLayersData = officialMapLayersData.filter(
 						(item) => {
 							const key = `${item.id}_${item.city}`;
 							if (!uniqueMap.has(key)) {
@@ -864,6 +877,7 @@ export const useContentStore = defineStore("content", {
 
 			// 先依權限決定資料來源(一般使用者只能看到公共儀表板組件)
 			let data = response.data.data || [];
+			data = data.filter(isOfficialComponent);
 
 			if (!authStore.user.is_admin) {
 				data = data.filter((item) => publicComponentID.has(item.id));

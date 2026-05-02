@@ -31,6 +31,7 @@ export const useAuthStore = defineStore("auth", {
 		errorMessage: "",
 		isMobileDevice: false,
 		isNarrowDevice: false,
+		hasRegisteredViewportListeners: false,
 		currentPath: "",
 	}),
 	getters: {},
@@ -40,6 +41,7 @@ export const useAuthStore = defineStore("auth", {
 		async initialChecks() {
 			const contentStore = useContentStore();
 			const mapStore = useMapStore();
+			this.registerViewportListeners();
 			// Check if the user is using a mobile device
 			this.checkIfMobile();
 
@@ -153,15 +155,29 @@ export const useAuthStore = defineStore("auth", {
 		// 1. Check if the user is using a mobile device.
 		// This is used to determine whether to show the mobile version of the dashboard.
 		checkIfMobile() {
+			this.isMobileDevice = false;
+			this.isNarrowDevice = false;
+
 			if (navigator.maxTouchPoints > 2) {
+				this.isMobileDevice = true;
+			}
+			if (window.matchMedia("(pointer:coarse)").matches) {
 				this.isMobileDevice = true;
 			}
 			if (window.matchMedia("(pointer:fine)").matches) {
 				this.isMobileDevice = false;
 			}
-			if (window.screen.width < 750) {
+			if (window.innerWidth < 768) {
 				this.isNarrowDevice = true;
 			}
+		},
+		registerViewportListeners() {
+			if (this.hasRegisteredViewportListeners) {
+				return;
+			}
+			window.addEventListener("resize", this.checkIfMobile);
+			window.addEventListener("orientationchange", this.checkIfMobile);
+			this.hasRegisteredViewportListeners = true;
 		},
 		// 2. Set the current path of the user
 		setCurrentPath(path) {

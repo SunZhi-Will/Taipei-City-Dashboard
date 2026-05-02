@@ -10,6 +10,7 @@ Testing: Jack Huang (Data Scientist), Ian Huang (Data Analysis Intern)
 
 <script setup>
 /* global gtag */
+import { computed, ref, watch } from "vue";
 import DashboardComponent from "../dashboardComponent/DashboardComponent.vue";
 import router from "../router";
 import { useContentStore } from "../store/contentStore";
@@ -22,6 +23,57 @@ import ReportIssue from "../components/dialogs/ReportIssue.vue";
 const contentStore = useContentStore();
 const dialogStore = useDialogStore();
 const authStore = useAuthStore();
+const expandedComponentId = ref(null);
+
+const expandedComponent = computed(() => {
+	return (
+		contentStore.currentDashboard.components?.find(
+			(item) => item.id === expandedComponentId.value
+		) || null
+	);
+});
+
+function toggleContentFocus(id) {
+	expandedComponentId.value = expandedComponentId.value === id ? null : id;
+}
+
+function handleDeleteExpanded(id) {
+	contentStore.deleteComponent(id);
+	expandedComponentId.value = null;
+}
+
+function handleChangeCityExpanded(city) {
+	if (!expandedComponent.value) {
+		return;
+	}
+
+	const selectedData = contentStore.cityDashboard.components.find((data) => {
+		return (
+			data.index === expandedComponent.value.index &&
+      data.city === city
+		);
+	});
+
+	if (!selectedData) {
+		return;
+	}
+
+	const componentIndex = contentStore.currentDashboard.components.findIndex(
+		(item) => item.id === selectedData.id
+	);
+
+	if (componentIndex >= 0) {
+		contentStore.setComponentData(componentIndex, selectedData);
+		expandedComponentId.value = selectedData.id;
+	}
+}
+
+watch(
+	() => contentStore.currentDashboard.index,
+	() => {
+		expandedComponentId.value = null;
+	}
+);
 
 function handleOpenSettings() {
 	contentStore.editDashboard = JSON.parse(
@@ -70,9 +122,41 @@ function handleMoreInfo(item) {
 </script>
 
 <template>
+  <div
+    v-if="expandedComponent"
+    class="dashboard dashboard-focus"
+  >
+    <DashboardComponent
+      :config="expandedComponent"
+      mode="focus"
+      :info-btn="true"
+      :expanded-in-content="true"
+      :active-city="expandedComponent.city"
+      :select-btn="true"
+      :select-btn-disabled="contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city).length === 1 || contentStore.currentDashboardExcluded.components.filter((data) => data.index === expandedComponent.index).length === 0"
+      :select-btn-list="contentStore.currentDashboard?.city
+        ? contentStore.cityManager.getSelectList(contentStore.currentDashboard?.city)
+        : contentStore.cityManager.getCities(contentStore.cityManager.activeCities)
+      "
+      :city-tag="contentStore.currentDashboard?.city
+        ? contentStore.cityManager.getTagList(contentStore.currentDashboard?.city)
+        : contentStore.cityManager.getTagList(expandedComponent.city)
+      "
+      :delete-btn="contentStore.personalDashboards.map((item) => item.index).includes(contentStore.currentDashboard.index)"
+      :favorite-btn="authStore.token && contentStore.currentDashboard.icon !== 'favorite'"
+      :is-favorite="contentStore.favorites?.components.includes(expandedComponent.id)"
+      @expand-layout="toggleContentFocus"
+      @favorite="(id) => { toggleFavorite(id, expandedComponent.name, expandedComponent.city); }"
+      @info="(item) => { handleMoreInfo(item); }"
+      @delete="handleDeleteExpanded"
+      @change-city="handleChangeCityExpanded"
+    />
+    <MoreInfo />
+    <ReportIssue />
+  </div>
   <!-- 1. If the dashboard is map-layers -->
   <div
-    v-if="contentStore.currentDashboard.index?.includes('map-layers')"
+    v-else-if="contentStore.currentDashboard.index?.includes('map-layers')"
     class="dashboard"
   >
     <DashboardComponent
@@ -88,6 +172,8 @@ function handleMoreInfo(item) {
       :city-tag="contentStore.cityManager.getTagList(contentStore.currentDashboard?.city)"
       :favorite-btn="authStore.token ? true : false"
       :is-favorite="contentStore.favorites?.components.includes(item.id)"
+      :expanded-in-content="false"
+      @expand-layout="toggleContentFocus"
       @favorite="
         (id) => {
           toggleFavorite(id,item.name,item.city);
@@ -148,6 +234,8 @@ function handleMoreInfo(item) {
           contentStore.currentDashboard.icon !== 'favorite'
       "
       :is-favorite="contentStore.favorites?.components.includes(item.id)"
+      :expanded-in-content="false"
+      @expand-layout="toggleContentFocus"
       @favorite="
         (id) => {
           toggleFavorite(id,item.name,item.city);
@@ -226,13 +314,15 @@ function handleMoreInfo(item) {
 
 <style scoped lang="scss">
 .dashboard {
-	max-height: calc(100vh - 127px);
-	max-height: calc(var(--vh) * 100 - 127px);
 	display: grid;
-	row-gap: var(--font-s);
-	column-gap: var(--font-s);
-	margin: var(--font-m) var(--font-m);
-	overflow-y: scroll;
+	row-gap: 12px;
+	column-gap: 12px;
+  margin: var(--font-m);
+
+	@media (max-width: 768px) {
+		margin: 12px;
+		row-gap: 16px;
+	}
 
 	@media (min-width: 720px) {
 		grid-template-columns: 1fr 1fr;
@@ -282,6 +372,11 @@ function handleMoreInfo(item) {
 			}
 		}
 	}
+
+  &-focus {
+    display: block;
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes spin {
