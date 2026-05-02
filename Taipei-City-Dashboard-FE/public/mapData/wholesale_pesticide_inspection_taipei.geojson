@@ -1,0 +1,209 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "type": "monthly_flat",
+    "available_months": [
+      "2026-05",
+      "2026-04"
+    ],
+    "month_stats": {
+      "2026-04": {
+        "合格": 370,
+        "不合格": 32
+      },
+      "2026-05": {
+        "合格": 82,
+        "不合格": 8
+      }
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5023,
+          25.0245
+        ]
+      },
+      "properties": {
+        "market": "第一批發市場",
+        "result": "不合格",
+        "product_name": "辣椒",
+        "pesticides": "☆氟尼胺Flonicamid;0.02(0.01); ☆腐絕Thiabendazole;0.09(0.01)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5023,
+          25.0245
+        ]
+      },
+      "properties": {
+        "market": "第一批發市場",
+        "result": "不合格",
+        "product_name": "芹菜",
+        "pesticides": "☆因得克Indoxacarb;0.2(0.01)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5023,
+          25.0245
+        ]
+      },
+      "properties": {
+        "market": "第一批發市場",
+        "result": "不合格",
+        "product_name": "甘藷葉",
+        "pesticides": "☆派滅淨Pymetrozine;0.07(0.01); ☆賜滅芬Spiromesifen;0.15(0.01)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5023,
+          25.0245
+        ]
+      },
+      "properties": {
+        "market": "第一批發市場",
+        "result": "不合格",
+        "product_name": "辣椒",
+        "pesticides": "賓克隆Pencycuron;0.14(0.05)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5023,
+          25.0245
+        ]
+      },
+      "properties": {
+        "market": "第一批發市場",
+        "result": "不合格",
+        "product_name": "豌豆",
+        "pesticides": "可尼丁Clothianidin;0.15(0.02)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5023,
+          25.0245
+        ]
+      },
+      "properties": {
+        "market": "第一批發市場",
+        "result": "不合格",
+        "product_name": "辣椒",
+        "pesticides": "達特南Dinotefuran;0.56(0.5); 益達胺Imidacloprid;0.65(0.5)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5394,
+          25.0683
+        ]
+      },
+      "properties": {
+        "market": "第二批發市場",
+        "result": "不合格",
+        "product_name": "芹菜",
+        "pesticides": "☆亞賜圃Isoprothiolane;0.02(0.01); ☆三賽唑Tricyclazole;0.03(0.01)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5394,
+          25.0683
+        ]
+      },
+      "properties": {
+        "market": "第二批發市場",
+        "result": "不合格",
+        "product_name": "雜柑",
+        "pesticides": "☆得克利Tebuconazole;0.04(0.01)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5394,
+          25.0683
+        ]
+      },
+      "properties": {
+        "market": "第二批發市場",
+        "result": "不合格",
+        "product_name": "黃秋葵",
+        "pesticides": "☆得克利Tebuconazole;0.02(0.01)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5394,
+          25.0683
+        ]
+      },
+      "properties": {
+        "market": "第二批發市場",
+        "result": "不合格",
+        "product_name": "芫荽",
+        "pesticides": "☆賽達松Phenthoate;0.02(0.01)",
+        "month": "2026-04"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.5394,
+          25.0683
+        ]
+      },
+      "properties": {
+        "market": "第二批發市場",
+        "result": "不合格",
+        "product_name": "芹菜",
+        "pesticides": "☆因得克Indoxacarb;0.03(0.01); ☆亞賜圃Isoprothiolane;0.02(0.01)",
+        "month": "2026-04"
+      }
+    }
+  ]
+}

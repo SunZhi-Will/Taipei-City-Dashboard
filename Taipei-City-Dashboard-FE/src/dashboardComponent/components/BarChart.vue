@@ -73,7 +73,7 @@ const chartOptions = ref({
 				"</h6>" +
 				"<span>" +
 				series[seriesIndex][dataPointIndex] +
-				` ${props.chart_config.unit}` +
+					` ${props.chart_config.unit ?? ''}` +
 				"</span>" +
 				"</div>"
 			);
@@ -107,7 +107,8 @@ const chartOptions = ref({
 });
 
 const chartHeight = computed(() => {
-	return `${40 + props.series[0].data.length * 30}`;
+	const len = props.series?.[0]?.data?.length ?? 0;
+	return `${40 + len * 30}`;
 });
 
 const selectedIndex = ref(null);

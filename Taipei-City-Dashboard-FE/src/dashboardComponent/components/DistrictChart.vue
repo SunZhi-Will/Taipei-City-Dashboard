@@ -291,7 +291,7 @@ function handleDataSelection(index) {
   >
     <div class="districtchart-title">
       <h5>總合</h5>
-      <h6>{{ districtData.sum }} {{ chart_config.unit }}</h6>
+      <h6>{{ districtData.sum }} {{ chart_config.unit ?? '' }}</h6>
       <div class="districtchart-title-legend">
         <p>多</p>
         <div
@@ -1223,7 +1223,7 @@ function handleDataSelection(index) {
           <h6>{{ targetDistrict }}</h6>
           <span>
             {{ districtData[targetDistrict] }}
-            {{ chart_config.unit }}
+            {{ chart_config.unit ?? '' }}
           </span>
 
           <template v-if="tooltipData">
@@ -1235,7 +1235,7 @@ function handleDataSelection(index) {
                 v-for="series in item[targetDistrict]?.seriesGroups"
                 :key="series?.name"
               >
-                <div>{{ series.name }}: {{ series.value }} {{ chart_config.unit }}</div>
+                <div>{{ series.name }}: {{ series.value }} {{ chart_config.unit ?? '' }}</div>
               </template>
             </div>
           </template>

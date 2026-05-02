@@ -132,7 +132,7 @@ const chartOptions = ref({
 				"</h6>" +
 				"<span>" +
 				`${series[seriesIndex][dataPointIndex]}` +
-				`${props.chart_config.unit}` +
+				`${props.chart_config.unit ?? ''}` +
 				"</span>" +
 				"</div>"
 			);
@@ -215,7 +215,7 @@ function handleDataSelection(_e, _chartContext, config) {
   >
     <div class="heatmapchart-title">
       <h5>總合</h5>
-      <h6>{{ heatmapData.sum }} {{ chart_config.unit }}</h6>
+      <h6>{{ heatmapData.sum }} {{ chart_config.unit ?? '' }}</h6>
     </div>
     <VueApexCharts
       width="100%"

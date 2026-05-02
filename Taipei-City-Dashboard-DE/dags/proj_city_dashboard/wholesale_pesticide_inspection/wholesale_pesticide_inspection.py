@@ -99,11 +99,17 @@ def _wholesale_pesticide_inspection(**kwargs):
 
     def roc_to_date(s):
         # 1150428 → 2026-04-28；115/04/28 → 2026-04-28
+        # Bug fix: 若年份部分為 4 位數（>= 1900），判定已是西元年，不再加 1911
+        # e.g. "2013/12/28" (PDF 誤印西元年) → 不應再 +1911 成 3924
         s = s.strip().replace("年", "/").replace("月", "/").replace("日", "").replace(".", "/")
         if "/" in s:
             parts = s.split("/")
-            y = int(parts[0]) + 1911
-            return datetime(y, int(parts[1]), int(parts[2]))
+            y_raw = int(parts[0])
+            y = y_raw if y_raw >= 1900 else y_raw + 1911
+            try:
+                return datetime(y, int(parts[1]), int(parts[2]))
+            except ValueError:
+                return None
         if len(s) == 7 and s.isdigit():
             return datetime(int(s[:3]) + 1911, int(s[3:5]), int(s[5:7]))
         return None

@@ -53,6 +53,9 @@ DECLARE
 
     -- dashboard
     v_dashboard_id   BIGINT;
+    v_taipei_dashboard_id BIGINT;
+    v_map_layers_taipei_id BIGINT;
+    v_map_layers_metrotaipei_id BIGINT;
     v_max_dash_id    BIGINT;
 
 BEGIN
@@ -372,7 +375,101 @@ ORDER BY cases DESC$q$,
     RAISE NOTICE '8. query_charts upserted';
 
     -- ============================================================
-    -- 9. 建立 food_safety_tpe 儀表板（冪等）
+    -- 9. 確保 map-layers-taipei / map-layers-metrotaipei 存在
+    -- ============================================================
+    SELECT id INTO v_map_layers_taipei_id
+    FROM public.dashboards
+    WHERE index = 'map-layers-taipei'
+    LIMIT 1;
+
+    IF v_map_layers_taipei_id IS NULL THEN
+        SELECT COALESCE(MAX(id), 300) + 1 INTO v_max_dash_id
+        FROM public.dashboards WHERE id < 900;
+
+        v_map_layers_taipei_id := v_max_dash_id;
+        INSERT INTO public.dashboards
+            (id, index, name, components, icon, updated_at, created_at)
+        VALUES (
+            v_map_layers_taipei_id,
+            'map-layers-taipei',
+            '圖資資訊',
+            ARRAY[]::integer[],
+            'public',
+            NOW(), NOW()
+        );
+    END IF;
+
+    INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+    VALUES (v_map_layers_taipei_id, 2)
+    ON CONFLICT DO NOTHING;
+
+    SELECT id INTO v_map_layers_metrotaipei_id
+    FROM public.dashboards
+    WHERE index = 'map-layers-metrotaipei'
+    LIMIT 1;
+
+    IF v_map_layers_metrotaipei_id IS NULL THEN
+        SELECT COALESCE(MAX(id), 300) + 1 INTO v_max_dash_id
+        FROM public.dashboards WHERE id < 900;
+
+        v_map_layers_metrotaipei_id := v_max_dash_id;
+        INSERT INTO public.dashboards
+            (id, index, name, components, icon, updated_at, created_at)
+        VALUES (
+            v_map_layers_metrotaipei_id,
+            'map-layers-metrotaipei',
+            '圖資資訊',
+            ARRAY[]::integer[],
+            'public',
+            NOW(), NOW()
+        );
+    END IF;
+
+    INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+    VALUES (v_map_layers_metrotaipei_id, 3)
+    ON CONFLICT DO NOTHING;
+
+    -- ============================================================
+    -- 9. 建立 food_safety_taipei 儀表板（冪等，僅 taipei）
+    -- ============================================================
+    IF NOT EXISTS (SELECT 1 FROM public.dashboards WHERE index = 'food_safety_taipei') THEN
+        SELECT COALESCE(MAX(id), 300) + 1 INTO v_max_dash_id
+        FROM public.dashboards WHERE id < 900;
+
+        INSERT INTO public.dashboards
+            (id, index, name, components, icon, updated_at, created_at)
+        VALUES (
+            v_max_dash_id,
+            'food_safety_taipei',
+            '臺北食品安全',
+            ARRAY[
+                v_taipei_food_cid,
+                v_fp_trend_cid,
+                v_fp_cause_cid,
+                v_fp_food_cid,
+                v_fp_place_cid
+            ],
+            'health_and_safety',
+            NOW(), NOW()
+        );
+        RAISE NOTICE '  food_safety_taipei dashboard created (id=%)', v_max_dash_id;
+    ELSE
+        UPDATE public.dashboards
+        SET
+            components = ARRAY[
+                v_taipei_food_cid,
+                v_fp_trend_cid,
+                v_fp_cause_cid,
+                v_fp_food_cid,
+                v_fp_place_cid
+            ],
+            updated_at = NOW()
+        WHERE index = 'food_safety_taipei';
+        RAISE NOTICE '  food_safety_taipei dashboard updated';
+    END IF;
+
+    -- ============================================================
+    -- 10. 建立 food_safety_tpe 儀表板（冪等，僅 metrotaipei）
     -- ============================================================
     IF NOT EXISTS (SELECT 1 FROM public.dashboards WHERE index = 'food_safety_tpe') THEN
         SELECT COALESCE(MAX(id), 300) + 1 INTO v_max_dash_id
@@ -420,16 +517,31 @@ ORDER BY cases DESC$q$,
     WHERE index = 'map-layers-metrotaipei'
       AND NOT (components @> ARRAY[v_ntpc_factory_cid::integer]);
 
-    -- food_safety_tpe 加入 taipei(2) 和 metrotaipei(3) 群組
-    INSERT INTO public.dashboard_groups (dashboard_id, group_id)
-    SELECT id, 2 FROM public.dashboards WHERE index = 'food_safety_tpe'
-    ON CONFLICT DO NOTHING;
+        -- food_safety_taipei 只加入 taipei(2) 群組
+        SELECT id INTO v_taipei_dashboard_id
+        FROM public.dashboards
+        WHERE index = 'food_safety_taipei';
+
+        DELETE FROM public.dashboard_groups
+        WHERE dashboard_id = v_taipei_dashboard_id
+            AND group_id IN (2, 3);
+
+        INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+        VALUES (v_taipei_dashboard_id, 2)
+        ON CONFLICT DO NOTHING;
+
+        -- food_safety_tpe 只加入 metrotaipei(3) 群組
+        DELETE FROM public.dashboard_groups
+        WHERE dashboard_id IN (
+                SELECT id FROM public.dashboards WHERE index = 'food_safety_tpe'
+        )
+            AND group_id IN (2, 3);
 
     INSERT INTO public.dashboard_groups (dashboard_id, group_id)
-    SELECT id, 3 FROM public.dashboards WHERE index = 'food_safety_tpe'
+        SELECT id, 3 FROM public.dashboards WHERE index = 'food_safety_tpe'
     ON CONFLICT DO NOTHING;
 
-    RAISE NOTICE '9. Dashboards updated';
+        RAISE NOTICE '10. Dashboards updated';
     RAISE NOTICE '=== Migration add_food_safety_components completed ===';
 
 END $mig$;

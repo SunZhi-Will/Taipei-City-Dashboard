@@ -88,7 +88,7 @@ const chartOptions = ref({
 				"</h6>" +
 				"<span>" +
 				series[seriesIndex][dataPointIndex] +
-				` ${props.chart_config.unit}` +
+					` ${props.chart_config.unit ?? ''}` +
 				"</span>" +
 				"</div>"
 			);
@@ -150,7 +150,7 @@ watch(
 
 <template>
   <div v-if="activeChart === 'TimelineSeparateChart' && localSeries.length > 0">
-    <!-- 月份動畫控制列 + KPI -->
+    <!-- 月份動畫控制列 + KPI (優化版) -->
     <div
       v-if="showControls"
       class="timechart-controls"
@@ -167,28 +167,23 @@ watch(
           class="timechart-kpi-fail"
         >不合格 {{ monthStats.fail }}</span>
       </div>
-      <!-- 播放列：播放/暫停 + 手動選月 -->
+      <!-- 播放列：播放/暫停 + 播放進度條 -->
       <div class="timechart-playbar">
         <button
           class="timechart-playbtn"
           :title="isPlaying ? '暫停' : '播放月份動畫'"
           @click="togglePlay"
         >
-          <span class="material-icons">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
+          <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
         </button>
-        <select
-          :value="currentMonth"
-          class="timechart-monthselect"
-          @change="onMonthSelect($event.target.value)"
+        <input
+          type="range"
+          class="timechart-slider"
+          :min="0"
+          :max="availableMonths.length - 1"
+          :value="availableMonths.indexOf(currentMonth)"
+          @input="onMonthSelect(availableMonths[$event.target.value])"
         >
-          <option
-            v-for="m in availableMonths"
-            :key="m"
-            :value="m"
-          >
-            {{ formatMonthLabel(m) }}
-          </option>
-        </select>
       </div>
     </div>
 
@@ -202,32 +197,34 @@ watch(
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .timechart-controls {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin-bottom: 4px;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 8px 0;
+	margin-bottom: 8px;
+	border-bottom: 1px solid var(--color-border);
 }
 
 .timechart-kpi {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 12px;
 	flex-wrap: wrap;
 }
 
 .timechart-kpi-month {
-	font-size: 0.8rem;
-	color: var(--color-complement-text);
-	font-weight: 600;
+	font-size: 0.85rem;
+	color: var(--color-highlight);
+	font-weight: 700;
 	white-space: nowrap;
 }
 
 .timechart-kpi-pass {
 	font-size: 0.8rem;
-	color: #27ae60;
+	color: #2ecc71;
 	font-weight: 600;
 }
 
@@ -240,42 +237,78 @@ watch(
 .timechart-playbar {
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	flex-shrink: 0;
+	gap: 10px;
+	width: 100%;
 }
 
 .timechart-playbtn {
-	background: transparent;
-	border: 1px solid var(--color-border);
-	border-radius: 4px;
-	padding: 1px 4px;
+	width: 28px;
+	height: 28px;
+	background: rgba(var(--color-highlight-rgb, 90, 156, 248), 0.1);
+	border: 1px solid rgba(var(--color-highlight-rgb, 90, 156, 248), 0.2) !important;
+	border-radius: 50%;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
-	color: var(--color-normal-text);
-	transition: background 0.15s;
+	justify-content: center;
+	color: var(--color-highlight);
+	transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+	flex-shrink: 0;
+
+	&:hover {
+		background: var(--color-highlight);
+		color: #fff;
+		transform: scale(1.1);
+		box-shadow: 0 0 10px rgba(90, 156, 248, 0.4);
+	}
+
+	.material-icons-round {
+		font-size: 18px;
+		line-height: 1;
+	}
 }
 
-.timechart-playbtn:hover {
-	background: var(--color-highlight);
-}
-
-.timechart-playbtn .material-icons {
-	font-size: 18px;
-}
-
-.timechart-monthselect {
-	background: var(--color-component-background);
-	color: var(--color-normal-text);
-	border: 1px solid var(--color-border);
-	border-radius: 4px;
-	padding: 2px 6px;
-	font-size: 0.8rem;
-	cursor: pointer;
-}
-
-.timechart-monthselect:focus {
+.timechart-slider {
+	flex: 1;
+	min-width: 0;
+	height: 6px;
+	-webkit-appearance: none;
+	appearance: none;
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 3px;
 	outline: none;
-	border-color: var(--color-highlight);
+	cursor: pointer;
+	position: relative;
+	overflow: visible;
+
+	&::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--color-highlight);
+		border: 2px solid #fff;
+		cursor: pointer;
+		box-shadow: 0 0 8px rgba(0, 0, 0, 0.5), 0 0 4px var(--color-highlight);
+		transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+		&:hover {
+			transform: scale(1.25);
+			background: #fff;
+			border-color: var(--color-highlight);
+		}
+	}
+
+	&::-moz-range-thumb {
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: var(--color-highlight);
+		border: 2px solid #fff;
+		cursor: pointer;
+		box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+		transition: all 0.2s;
+	}
 }
 </style>

@@ -380,7 +380,7 @@ function handleLegendSelection(index) {
           }}{{ showedData[aHovered].data[rHovered].r }}
         </h6>
         <span>{{ showedData[aHovered].data[rHovered].value
-        }}{{ chart_config.unit }}</span>
+        }}{{ chart_config.unit ?? '' }}</span>
       </div>
     </Teleport>
   </div>

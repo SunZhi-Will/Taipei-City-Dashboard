@@ -96,11 +96,10 @@ const chartOptions = ref({
 			return `
 			<div class="chart-tooltip">
 				<h6>${label}-實際數值</h6>
-				<span>${value} ${props.chart_config.unit}</span>
+				<span>${value} ${props.chart_config.unit ?? ''}</span>
 				<h6>${label}-目標數值</h6>
-				<span>${goalValue} ${props.chart_config.unit}</span>
-			</div>`;
-		},
+				<span>${goalValue} ${props.chart_config.unit ?? ''}</span>
+			</div>`;		},
 		followCursor: true,
 	},
 	xaxis: {

@@ -21,6 +21,7 @@ DO $mig$
 DECLARE
 	v_taipei_food_map_id BIGINT;
 	v_ntpc_factory_map_id BIGINT;
+	v_taipei_wholesale_map_id BIGINT;
 	v_wholesale_map_id BIGINT;
 
 	v_taipei_food_cid BIGINT;
@@ -29,10 +30,21 @@ DECLARE
 	v_cause_cid BIGINT;
 	v_food_cid BIGINT;
 	v_place_cid BIGINT;
+	v_taipei_wholesale_cid BIGINT;
 	v_wholesale_cid BIGINT;
 
+	v_map_layers_taipei_id BIGINT;
+	v_map_layers_metrotaipei_id BIGINT;
 	v_dashboard_id BIGINT;
+	v_dashboard_taipei_id BIGINT;
 BEGIN
+	-- Keep SERIAL sequence in sync for idempotent reruns on restored DBs.
+	PERFORM setval(
+		'public.component_maps_id_seq',
+		COALESCE((SELECT MAX(id) FROM public.component_maps), 1),
+		true
+	);
+
 	-- component_maps: taipei_imap_food
 	SELECT id INTO v_taipei_food_map_id
 	FROM public.component_maps
@@ -96,6 +108,37 @@ BEGIN
 	END IF;
 
 	-- component_maps: wholesale_pesticide_inspection
+	SELECT id INTO v_taipei_wholesale_map_id
+	FROM public.component_maps
+	WHERE index = 'wholesale_pesticide_inspection_taipei'
+	LIMIT 1;
+
+	IF v_taipei_wholesale_map_id IS NULL THEN
+		INSERT INTO public.component_maps (index, title, type, source, size, icon, paint, property)
+		VALUES (
+			'wholesale_pesticide_inspection_taipei',
+			'臺北批發市場農藥殘留檢驗',
+			'circle',
+			'geojson',
+			NULL,
+			NULL,
+			'{"circle-color":["match",["get","result"],"合格","#2ECC71","#E74C3C"],"circle-radius":5,"circle-opacity":0.85,"circle-stroke-color":"#ffffff","circle-stroke-width":0.8}'::json,
+			'[{"key":"market","name":"市場"},{"key":"product_name","name":"品項"},{"key":"result","name":"結果"},{"key":"month","name":"月份"},{"_animate":true,"interval_ms":1500}]'::json
+		)
+		RETURNING id INTO v_taipei_wholesale_map_id;
+	ELSE
+		UPDATE public.component_maps
+		SET title = '臺北批發市場農藥殘留檢驗',
+			type = 'circle',
+			source = 'geojson',
+			size = NULL,
+			icon = NULL,
+			paint = '{"circle-color":["match",["get","result"],"合格","#2ECC71","#E74C3C"],"circle-radius":5,"circle-opacity":0.85,"circle-stroke-color":"#ffffff","circle-stroke-width":0.8}'::json,
+			property = '[{"key":"market","name":"市場"},{"key":"product_name","name":"品項"},{"key":"result","name":"結果"},{"key":"month","name":"月份"},{"_animate":true,"interval_ms":1500}]'::json
+		WHERE id = v_taipei_wholesale_map_id;
+	END IF;
+
+	-- component_maps: wholesale_pesticide_inspection
 	SELECT id INTO v_wholesale_map_id
 	FROM public.component_maps
 	WHERE index = 'wholesale_pesticide_inspection'
@@ -135,6 +178,7 @@ BEGIN
 		('food_poisoning_cause', '致病原因分布'),
 		('food_poisoning_food', '可能中毒食品分布'),
 		('food_poisoning_place', '食品中毒攝食場所'),
+		('wholesale_pesticide_inspection_taipei', '臺北蔬果農藥檢驗'),
 		('wholesale_pesticide_inspection', '雙北蔬果農藥檢驗')
 	ON CONFLICT (index) DO UPDATE
 	SET name = EXCLUDED.name;
@@ -145,6 +189,7 @@ BEGIN
 	SELECT id INTO v_cause_cid FROM public.components WHERE index = 'food_poisoning_cause';
 	SELECT id INTO v_food_cid FROM public.components WHERE index = 'food_poisoning_food';
 	SELECT id INTO v_place_cid FROM public.components WHERE index = 'food_poisoning_place';
+	SELECT id INTO v_taipei_wholesale_cid FROM public.components WHERE index = 'wholesale_pesticide_inspection_taipei';
 	SELECT id INTO v_wholesale_cid FROM public.components WHERE index = 'wholesale_pesticide_inspection';
 
 	-- component_charts
@@ -156,6 +201,7 @@ BEGIN
 		('food_poisoning_cause', '{#FF6B6B,#FF8C42,#FFD166,#8BD448,#2EC4B6,#4D96FF,#9B5DE5,#F15BB5,#8D99AE,#A98467}', '{DonutChart,BarChart}', '件'),
 		('food_poisoning_food', '{#4D96FF,#3A86FF,#FF6B6B,#F4A261,#FFD166,#8BD448,#2EC4B6,#9B5DE5,#F15BB5,#8D99AE}', '{DonutChart,BarChart}', '件'),
 		('food_poisoning_place', '{#4D96FF,#39D98A,#F5C542,#FF8C42,#FF6B6B,#9B5DE5,#2EC4B6,#A98467,#8D99AE,#90BE6D,#FFB703,#6C757D}', '{BarChart,DonutChart}', '件'),
+		('wholesale_pesticide_inspection_taipei', '{#39D98A,#F5C542,#FF6B6B}', '{DonutChart}', '件'),
 		('wholesale_pesticide_inspection', '{#39D98A,#F5C542,#FF6B6B}', '{DonutChart}', '件')
 	ON CONFLICT (index) DO UPDATE
 	SET color = EXCLUDED.color,
@@ -171,6 +217,7 @@ BEGIN
 		'food_poisoning_cause',
 		'food_poisoning_food',
 		'food_poisoning_place',
+		'wholesale_pesticide_inspection_taipei',
 		'wholesale_pesticide_inspection'
 	);
 
@@ -400,6 +447,42 @@ BEGIN
 		city_name
 	FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
 
+	-- wholesale_pesticide_inspection_taipei
+	INSERT INTO public.query_charts (
+		index, history_config, map_config_ids, map_filter,
+		time_from, time_to, update_freq, update_freq_unit,
+		source, short_desc, long_desc, use_case,
+		links, contributors, created_at, updated_at,
+		query_type, query_chart, query_history, city
+	)
+	VALUES (
+		'wholesale_pesticide_inspection_taipei',
+		NULL,
+		ARRAY[v_taipei_wholesale_map_id::integer],
+		'{"mode":"byParam","byParam":{"xParam":"result"}}'::json,
+		'static',
+		NULL,
+		1,
+		'day',
+		'臺北農產運銷公司',
+		'臺北批發市場農藥殘留檢驗結果。',
+		'統計臺北第一與第二批發市場資料，將非「合格」結果統一視為不合格。',
+		'適用於檢視臺北批發市場蔬果農藥殘留風險。',
+		'{https://www.tapmc.com.tw/}'::text[],
+		'{doit}'::text[],
+		NOW(),
+		NOW(),
+		'two_d',
+		$q$SELECT CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END AS x_axis,
+				 COUNT(*)::float AS data
+			FROM public.wholesale_pesticide_inspection
+		   WHERE market IN ('第一批發市場', '第二批發市場')
+		   GROUP BY 1
+		   ORDER BY CASE WHEN CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END = '合格' THEN 1 ELSE 2 END$q$,
+		NULL,
+		'taipei'
+	);
+
 	-- wholesale_pesticide_inspection
 	INSERT INTO public.query_charts (
 		index, history_config, map_config_ids, map_filter,
@@ -433,9 +516,85 @@ BEGIN
 		   ORDER BY CASE WHEN CASE WHEN result = '合格' THEN '合格' ELSE '不合格' END = '合格' THEN 1 ELSE 2 END$q$,
 		NULL,
 		city_name
-	FROM (VALUES ('taipei'::text), ('metrotaipei'::text)) AS cities(city_name);
+	FROM (VALUES ('metrotaipei'::text)) AS cities(city_name);
 
-	-- dashboard
+	SELECT id INTO v_map_layers_taipei_id
+	FROM public.dashboards
+	WHERE index = 'map-layers-taipei'
+	LIMIT 1;
+
+	IF v_map_layers_taipei_id IS NULL THEN
+		INSERT INTO public.dashboards (index, name, components, icon, updated_at, created_at)
+		VALUES (
+			'map-layers-taipei',
+			'圖資資訊',
+			ARRAY[]::integer[],
+			'public',
+			NOW(),
+			NOW()
+		)
+		RETURNING id INTO v_map_layers_taipei_id;
+	END IF;
+
+	INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+	VALUES (v_map_layers_taipei_id, 2)
+	ON CONFLICT DO NOTHING;
+
+	SELECT id INTO v_map_layers_metrotaipei_id
+	FROM public.dashboards
+	WHERE index = 'map-layers-metrotaipei'
+	LIMIT 1;
+
+	IF v_map_layers_metrotaipei_id IS NULL THEN
+		INSERT INTO public.dashboards (index, name, components, icon, updated_at, created_at)
+		VALUES (
+			'map-layers-metrotaipei',
+			'圖資資訊',
+			ARRAY[]::integer[],
+			'public',
+			NOW(),
+			NOW()
+		)
+		RETURNING id INTO v_map_layers_metrotaipei_id;
+	END IF;
+
+	INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+	VALUES (v_map_layers_metrotaipei_id, 3)
+	ON CONFLICT DO NOTHING;
+
+	-- taipei-only dashboard
+	INSERT INTO public.dashboards (index, name, components, icon, updated_at, created_at)
+	VALUES (
+		'food_safety_taipei',
+		'臺北食品安全',
+		ARRAY[
+			v_taipei_food_cid::integer,
+			v_food_cid::integer,
+			v_cause_cid::integer,
+			v_trend_cid::integer,
+			v_place_cid::integer,
+			v_taipei_wholesale_cid::integer
+		],
+		'health_and_safety',
+		NOW(),
+		NOW()
+	)
+	ON CONFLICT (index) DO UPDATE
+	SET name = EXCLUDED.name,
+		components = EXCLUDED.components,
+		icon = EXCLUDED.icon,
+		updated_at = NOW()
+	RETURNING id INTO v_dashboard_taipei_id;
+
+	DELETE FROM public.dashboard_groups
+	WHERE dashboard_id = v_dashboard_taipei_id
+	  AND group_id IN (2, 3);
+
+	INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+	VALUES (v_dashboard_taipei_id, 2)
+	ON CONFLICT DO NOTHING;
+
+	-- metrotaipei dashboard
 	INSERT INTO public.dashboards (index, name, components, icon, updated_at, created_at)
 	VALUES (
 		'food_safety_tpe',
@@ -465,9 +624,8 @@ BEGIN
 	  AND group_id IN (2, 3);
 
 	INSERT INTO public.dashboard_groups (dashboard_id, group_id)
-	VALUES
-		(v_dashboard_id, 2),
-		(v_dashboard_id, 3);
+	VALUES (v_dashboard_id, 3)
+	ON CONFLICT DO NOTHING;
 END $mig$;
 
 COMMIT;

@@ -255,7 +255,7 @@ function handleTable(list) {
           text-anchor="middle"
           class="small"
         >
-          <tspan>{{ chart_config.unit }}</tspan>
+          <tspan>{{ chart_config.unit ?? '' }}</tspan>
         </text>
       </svg>
       <div class="tablediv">

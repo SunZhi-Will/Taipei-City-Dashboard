@@ -162,7 +162,7 @@ function handleDataSelection(index) {
           :title="isPlaying ? '暫停' : '播放'"
           @click="togglePlay"
         >
-          <span class="material-icons">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
+          <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
         </button>
         <input
           type="range"
@@ -199,7 +199,7 @@ function handleDataSelection(index) {
         >
         <div v-if="item.value">
           <h5>{{ item.name }}</h5>
-          <h6>{{ item.value }} {{ chart_config.unit }}</h6>
+          <h6>{{ item.value }} {{ chart_config.unit ?? '' }}</h6>
         </div>
         <div v-else>
           <h6>{{ item.name }}</h6>
@@ -286,58 +286,72 @@ button {
 	}
 }
 
-/* 時間控制：上下兩排，緊湊版 */
+/* 時間控制：上下兩排，優化版 */
 .maplegend-anim {
 	flex-shrink: 0;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
-	gap: 2px;
-	padding-bottom: 4px;
+	gap: 6px;
+	padding: 8px 0;
+	margin-bottom: 8px;
 	border-bottom: 1px solid var(--color-border);
 
 	&-month {
-		font-size: 0.8rem;
+		font-size: 0.85rem;
 		font-weight: 700;
-		color: var(--color-complement-text);
+		color: var(--color-highlight);
 		white-space: nowrap;
-		line-height: 1.3;
+		line-height: 1;
+		letter-spacing: 0.02em;
 	}
 
 	&-bar {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 10px;
 		width: 100%;
 	}
 
 	&-btn {
-		background: transparent;
-		border: 1px solid var(--color-border) !important;
-		border-radius: 4px;
-		padding: 0 3px;
+		width: 28px;
+		height: 28px;
+		background: rgba(var(--color-highlight-rgb, 90, 156, 248), 0.1);
+		border: 1px solid rgba(var(--color-highlight-rgb, 90, 156, 248), 0.2) !important;
+		border-radius: 50%;
 		cursor: pointer;
 		display: flex;
 		align-items: center;
-		color: var(--color-normal-text);
-		transition: background 0.15s;
+		justify-content: center;
+		color: var(--color-highlight);
+		transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 		flex-shrink: 0;
 
-		&:hover { background: var(--color-highlight); }
+		&:hover {
+			background: var(--color-highlight);
+			color: #fff;
+			transform: scale(1.1);
+			box-shadow: 0 0 10px rgba(90, 156, 248, 0.4);
+		}
 
-		.material-icons { font-size: 16px; }
+		.material-icons-round {
+			font-size: 18px;
+			line-height: 1;
+		}
 	}
 
 	&-slider {
 		flex: 1;
 		min-width: 0;
-		height: 4px;
+		height: 6px;
 		-webkit-appearance: none;
 		appearance: none;
-		background: var(--color-border);
-		border-radius: 2px;
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 3px;
 		outline: none;
 		cursor: pointer;
+		position: relative;
+		overflow: visible;
 
 		&::-webkit-slider-thumb {
 			-webkit-appearance: none;
@@ -346,19 +360,27 @@ button {
 			height: 14px;
 			border-radius: 50%;
 			background: var(--color-highlight);
+			border: 2px solid #fff;
 			cursor: pointer;
-			transition: transform 0.1s;
+			box-shadow: 0 0 8px rgba(0, 0, 0, 0.5), 0 0 4px var(--color-highlight);
+			transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
-			&:hover { transform: scale(1.2); }
+			&:hover {
+				transform: scale(1.25);
+				background: #fff;
+				border-color: var(--color-highlight);
+			}
 		}
 
 		&::-moz-range-thumb {
-			width: 14px;
-			height: 14px;
+			width: 12px;
+			height: 12px;
 			border-radius: 50%;
 			background: var(--color-highlight);
+			border: 2px solid #fff;
 			cursor: pointer;
-			border: none;
+			box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+			transition: all 0.2s;
 		}
 	}
 }

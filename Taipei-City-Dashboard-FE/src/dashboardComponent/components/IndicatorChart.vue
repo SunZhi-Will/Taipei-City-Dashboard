@@ -88,7 +88,7 @@ const chartOptions = ref({
 				"</h6>" +
 				"<span>" +
 				props.series[seriesIndex].data[dataPointIndex] +
-				` ${props.chart_config.unit}` +
+					` ${props.chart_config.unit ?? ''}` +
 				"</span>" +
 				"</div>"
 			);

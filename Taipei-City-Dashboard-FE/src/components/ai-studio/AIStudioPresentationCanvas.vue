@@ -707,21 +707,23 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <!-- Play/Pause & Progress -->
+    <!-- Play/Pause & Progress (Premium Icon-based UI) -->
     <div class="status-footer">
-      <button
-        class="play-pause-btn"
-        :title="isPlaying ? '暫停自動播放 (Space)' : '開始自動播放 (Space)'"
-        @click="isPlaying = !isPlaying"
-      >
-        <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
-      </button>
-      <div class="progress-container">
-        <div
-			:key="progressRunKey"
-          class="progress-fill"
-          :style="{ width: progressWidth + '%', transitionDuration: progressDuration + 'ms' }"
-        />
+      <div class="status-footer-inner">
+        <button
+          class="play-pause-icon-btn"
+          :title="isPlaying ? '暫停自動播放 (Space)' : '開始自動播放 (Space)'"
+          @click="isPlaying = !isPlaying"
+        >
+          <span class="material-icons-round">{{ isPlaying ? 'pause' : 'play_arrow' }}</span>
+        </button>
+        <div class="premium-progress-container">
+          <div
+            :key="progressRunKey"
+            class="premium-progress-fill"
+            :style="{ width: progressWidth + '%', transitionDuration: progressDuration + 'ms' }"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -1413,56 +1415,78 @@ $text-dim: #94a3b8;
 	}
 }
 
-/* ── Status Footer ─────────────────────────────────────── */
+/* ── Status Footer (Premium Icon & Progress) ─────────────── */
 .status-footer {
 	position: absolute;
-	bottom: 0;
-	left: 0;
-	right: 0;
-	height: 24px;
+	bottom: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: calc(100% - 40px);
+	max-width: 900px;
 	z-index: 60;
 	display: flex;
-	align-items: flex-end;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
 }
 
-.play-pause-btn {
-	width: 24px;
-	height: 24px;
-	flex-shrink: 0;
-	background: rgba(15, 23, 42, 0.72);
+.status-footer-inner {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 6px 12px;
+	background: rgba(15, 23, 42, 0.45);
+	backdrop-filter: blur(12px);
 	border: 1px solid rgba(255, 255, 255, 0.08);
-	border-radius: 4px 0 0 0;
-	color: rgba(148, 163, 184, 0.8);
+	border-radius: 999px;
+	pointer-events: auto;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.play-pause-icon-btn {
+	width: 32px;
+	height: 32px;
+	flex-shrink: 0;
+	background: rgba($accent, 0.1);
+	border: 1px solid rgba($accent, 0.2);
+	border-radius: 50%;
+	color: $accent;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	transition: color 0.2s, background 0.2s;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
 	&:hover {
-		color: $accent;
-		background: rgba(15, 23, 42, 0.9);
+		background: $accent;
+		color: #fff;
+		transform: scale(1.1);
+		box-shadow: 0 0 15px rgba($accent, 0.4);
 	}
 
 	span {
-		font-size: 14px;
+		font-size: 20px;
 		line-height: 1;
 	}
 }
 
-.progress-container {
+.premium-progress-container {
 	flex: 1;
 	height: 4px;
-	align-self: flex-end;
-	background: rgba(255,255,255,0.05);
+	background: rgba(255, 255, 255, 0.08);
+	border-radius: 2px;
+	overflow: hidden;
+	position: relative;
 }
 
-.progress-fill {
+.premium-progress-fill {
 	height: 100%;
 	background: linear-gradient(90deg, $accent, #818cf8);
 	width: 0;
 	transition-property: width;
 	transition-timing-function: linear;
+	box-shadow: 0 0 8px rgba($accent, 0.5);
 }
 
 /* ── Animations ────────────────────────────────────────── */
