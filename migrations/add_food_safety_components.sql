@@ -554,6 +554,15 @@ ORDER BY cases DESC$q$,
     WHERE index = 'map-layers-metrotaipei'
       AND NOT (components @> ARRAY[v_ntpc_factory_cid::integer]);
 
+    -- food_safety_tpe 加入 taipei(2) 和 metrotaipei(3) 群組
+    INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+    SELECT id, 2 FROM public.dashboards WHERE index = 'food_safety_tpe'
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO public.dashboard_groups (dashboard_id, group_id)
+    SELECT id, 3 FROM public.dashboards WHERE index = 'food_safety_tpe'
+    ON CONFLICT DO NOTHING;
+
     RAISE NOTICE '9. Dashboards updated';
     RAISE NOTICE '=== Migration add_food_safety_components completed ===';
 
