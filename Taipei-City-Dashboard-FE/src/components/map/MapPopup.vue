@@ -30,7 +30,7 @@
     </div>
     <div class="mappopup-content">
       <div
-        v-for="item in mapConfigs[activeTab].property"
+        v-for="item in mapConfigs[activeTab].property.filter(p => !p._animate)"
         :key="item.key"
         :style="{
           display: 'flex',

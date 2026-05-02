@@ -1,0 +1,37 @@
+{
+    "dag_infos": {
+        "dag_id": "wholesale_pesticide_inspection",
+        "start_date": "2026-01-01",
+        "schedule_interval": "0 6 * * *",
+        "catchup": false,
+        "tags": ["food_safety", "雙北", "蔬果", "農藥", "批發市場", "tapmc", "ntpm"],
+        "description": "雙北果菜批發市場（北農第一/第二、新北農三重/板橋）每日農藥殘留快篩結果。",
+        "default_args": {
+            "owner": "airflow",
+            "email": ["DEFAULT_EMAIL_LIST"],
+            "email_on_retry": false,
+            "email_on_failure": true,
+            "retries": 1,
+            "retry_delay": 60
+        },
+        "ready_data_db": "postgres_default",
+        "ready_data_default_table": "wholesale_pesticide_inspection",
+        "ready_data_history_table": "",
+        "raw_data_db": "postgres_default",
+        "raw_data_table": "",
+        "load_behavior": "append"
+    },
+    "data_infos": {
+        "name_cn": "雙北果菜批發市場農藥殘留檢驗",
+        "airflow_update_freq": "06:00 daily",
+        "source": "https://www.tapmc.com.tw/Pages/NewsList/2 + https://www.ntpm.com.tw/NewsList.aspx/9",
+        "source_type": "web scraping (HTML list + PDF table parsing)",
+        "source_dept": "臺北農產運銷股份有限公司 + 新北市果菜運銷股份有限公司",
+        "gis_format": "Point",
+        "output_coordinate": "EPSG:4326",
+        "is_geometry": 1,
+        "dataset_description": "雙北 4 個果菜批發市場（第一果菜/萬華、第二果菜/中山、三重、板橋）每日蔬果農藥殘留快篩結果。北農 PDF 僅列不合格；新北農 PDF 列出全部抽檢含合格與不合格。",
+        "etl_description": "scrape news list pages, locate /DL.ashx?f=xxx attachment URL, download PDF, parse tables with pdfplumber, normalize 4-market data into single table; lat/lng hardcoded from public addresses",
+        "sensitivity": "public"
+    }
+}

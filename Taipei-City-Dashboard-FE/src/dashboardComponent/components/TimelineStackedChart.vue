@@ -106,7 +106,8 @@ function parseTime(time) {
 watch(
 	() => props.series,
 	(newVal) => {
-		localSeries.value = JSON.parse(JSON.stringify(newVal || []));
+		if (!newVal || newVal.length === 0) return;
+		localSeries.value = JSON.parse(JSON.stringify(newVal));
 
 		const timestamps = newVal?.[0]?.data?.map((p) => new Date(p.x).getTime()) || [];
 		if (timestamps.length < 2) return;
@@ -146,7 +147,7 @@ watch(
 </script>
 
 <template>
-  <div v-if="activeChart === 'TimelineStackedChart'">
+  <div v-if="activeChart === 'TimelineStackedChart' && localSeries.length > 0">
     <VueApexCharts
       width="100%"
       height="260px"

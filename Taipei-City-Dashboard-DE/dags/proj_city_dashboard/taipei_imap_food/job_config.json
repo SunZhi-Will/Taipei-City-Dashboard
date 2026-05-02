@@ -1,0 +1,37 @@
+{
+    "dag_infos": {
+        "dag_id": "taipei_imap_food",
+        "start_date": "2025-01-01",
+        "schedule_interval": "0 2 1 * *",
+        "catchup": false,
+        "tags": ["food_safety", "台北市", "食品稽查", "iMAP", "taipei"],
+        "description": "臺北市衛生局食藥粧網路地圖（iMAP）食品業者稽查結果，含 GPS 座標。",
+        "default_args": {
+            "owner": "airflow",
+            "email": ["DEFAULT_EMAIL_LIST"],
+            "email_on_retry": false,
+            "email_on_failure": true,
+            "retries": 1,
+            "retry_delay": 60
+        },
+        "ready_data_db": "postgres_default",
+        "ready_data_default_table": "taipei_imap_food",
+        "ready_data_history_table": "",
+        "raw_data_db": "postgres_default",
+        "raw_data_table": "",
+        "load_behavior": "replace"
+    },
+    "data_infos": {
+        "name_cn": "臺北市食品業者稽查紀錄（iMAP）",
+        "airflow_update_freq": "02:00 1st of every month",
+        "source": "https://imap.health.gov.tw/App_Prog/MapMetro2.aspx",
+        "source_type": "web scraping (ASP.NET UpdatePanel)",
+        "source_dept": "臺北市政府衛生局",
+        "gis_format": "Point",
+        "output_coordinate": "EPSG:4326",
+        "is_geometry": 1,
+        "dataset_description": "臺北市 12 行政區食品業者（含餐廳、市場、便利商店等）衛生稽查結果，包含業者名稱、地址、GPS 座標及稽查評等（A1合格/A2複查合格/B1限期改善/B2複查不合格）",
+        "etl_description": "scrape iMAP MapMetro2.aspx via ASP.NET UpdatePanel POST for each of 12 districts, extract JSON from cblChartValue1 span, save as GeoJSON Point",
+        "sensitivity": "public"
+    }
+}

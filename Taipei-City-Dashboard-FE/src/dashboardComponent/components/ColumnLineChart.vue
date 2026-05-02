@@ -183,7 +183,8 @@ function parseTime(time) {
 watch(
 	() => props.series,
 	(newVal) => {
-		localSeries.value = JSON.parse(JSON.stringify(newVal || []));
+		if (!newVal || newVal.length < 2) return;
+		localSeries.value = JSON.parse(JSON.stringify(newVal));
 
 		const timestamps = newVal?.[0]?.data?.map((p) => new Date(p.x).getTime()) || [];
 		if (timestamps.length < 2) return;
@@ -224,7 +225,7 @@ watch(
 
 <template>
   <div
-    v-if="activeChart === 'ColumnLineChart'"
+    v-if="activeChart === 'ColumnLineChart' && localSeries.length >= 2"
   >
     <VueApexCharts
       type="line"

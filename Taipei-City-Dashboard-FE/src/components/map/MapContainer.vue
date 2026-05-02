@@ -2,7 +2,7 @@
 
 <script setup>
 /* global gtag */
-import { onMounted, ref, computed, watch } from "vue";
+import { onMounted, onUnmounted, ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useAuthStore } from "../../store/authStore";
 import { useContentStore } from "../../store/contentStore";
@@ -76,9 +76,16 @@ watch(
 onMounted(() => {
 	mapStore.initializeMapBox();
 	mapStore.setCurrentLocation();
-	route.query.city 
+	route.query.city
 		? mapStore.updateMapViewForCity(route.query.city)
 		: mapStore.updateMapViewForCity('default');
+});
+
+onUnmounted(() => {
+	if (mapStore.map) {
+		mapStore.map.remove();
+		mapStore.map = null;
+	}
 });
 </script>
 

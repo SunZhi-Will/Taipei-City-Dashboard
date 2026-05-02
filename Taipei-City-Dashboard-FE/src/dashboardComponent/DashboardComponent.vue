@@ -28,6 +28,7 @@ import BarChartWithGoal from "./components/BarChartWithGoal.vue";
 import IconPercentChart from "./components/IconPercentChart.vue";
 import IndicatorChart from "./components/IndicatorChart.vue";
 import TextUnitChart from "./components/TextUnitChart.vue";
+import AnimatedColumnChart from "./components/AnimatedColumnChart.vue";
 
 import MapLegendSvg from "./assets/chart/MapLegend.svg";
 import DistrictChartSvg from "./assets/chart/DistrictChart.svg";
@@ -222,6 +223,8 @@ function returnChartComponent(name, svg) {
 		return svg ? IndicatorChartSvg : IndicatorChart;
 	case "TextUnitChart":
 		return svg ? TextUnitChartSvg : TextUnitChart;
+	case "AnimatedColumnChart":
+		return svg ? ColumnChartSvg : AnimatedColumnChart;
 	default:
 		return svg ? MapLegendSvg : MapLegend;
 	}
@@ -410,7 +413,7 @@ function returnChartComponent(name, svg) {
       </div>
     </div>
     <div
-      v-else-if="config.chart_data && (toggleOn || !mode.includes('map'))"
+      v-else-if="config.chart_data && config.chart_data.length > 0 && (toggleOn || !mode.includes('map'))"
       :class="{
         'dashboardcomponent-chart': true,
         'half-chart': mode === 'half',
@@ -447,7 +450,7 @@ function returnChartComponent(name, svg) {
     </div>
     <div
       v-else-if="
-        config.chart_data === null &&
+        (config.chart_data === null || (Array.isArray(config.chart_data) && config.chart_data.length === 0)) &&
           (toggleOn || !mode.includes('map'))
       "
       :class="{
