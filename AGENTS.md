@@ -19,6 +19,35 @@
 
 ---
 
+## 0.5 Platform 差異（macOS / WSL2 / Linux 三平台都支援）
+
+| 項目 | macOS (Intel/Apple Silicon) | WSL2 | Linux |
+|------|---|---|---|
+| Docker | Docker Desktop（必裝且要先開啟）| Docker Desktop（WSL backend）或 WSL native | docker engine |
+| Apple Silicon BE build | ⚠️ Rosetta 模擬 amd64，慢 5-10× | 原生 amd64 | 原生 |
+| `chmod 777 tmp/` (§1.3) | 通常不需要（VM 隔離 UID）但跑也無害 | **必須**（uid 對映問題） | 視 host uid 而定 |
+| port 8080 衝突 | 通常不會（除非另開過服務） | 可能（看是否跑其他專案如 phpmyadmin） | 視情況 |
+| Override 是否要用 | 8080 可用 → **可省略 override** | 多半要用（避 8080 衝突） | 視情況 |
+| `localhost` 連 container | 透過 Docker Desktop 內 VM | 直接 | 直接 |
+| AIRFLOW_UID | 寫 1000 即可（VM 內處理） | 寫 1000（對映 host user） | 用 `id -u` 取 |
+
+### macOS 特別注意
+
+1. **Apple Silicon (M1/M2/M3/M4)**：BE Dockerfile 硬寫 amd64，會走 Rosetta。確認 Docker Desktop 設定：
+   - **Settings → General → Use Rosetta for x86/amd64 emulation on Apple Silicon** ✅ 開
+   - 首次 BE build 預估 10-15 分鐘（比 Intel/Linux 慢）
+2. **Docker Desktop 必須先啟動**：圖示在選單列。沒啟動的話 `docker --version` 會失敗
+3. **記憶體配置**：Docker Desktop → Settings → Resources → Memory，**至少給 6GB**（Airflow + BE + DB 同時跑會吃 4GB+）
+4. **shell 預設**：macOS 預設 zsh，本檔指令在 zsh 也通；如果遇到 `[ -f ... ]` 問題改用 `test -f ... || ...`
+
+### WSL2 特別注意
+
+1. **路徑要在 WSL 檔案系統內**（如 `~/projects/...`），**不要**放 `/mnt/c/...`（NTFS mount，I/O 慢 10×、ETL 會卡）
+2. `chmod 777 Taipei-City-Dashboard-BE/tmp` 是必須的（air live-reload 寫不進去）
+3. Docker Desktop 必須在 WSL2 backend 開啟整合：Settings → Resources → WSL Integration → 啟用對應 distro
+
+---
+
 ## 1. 前置（一次性）
 
 ```bash
@@ -56,7 +85,11 @@ docker network create --driver=bridge --subnet=192.168.128.0/24 \
 
 ```bash
 mkdir -p Taipei-City-Dashboard-DE/{logs,plugins,data}
-mkdir -p Taipei-City-Dashboard-BE/tmp && chmod 777 Taipei-City-Dashboard-BE/tmp
+mkdir -p Taipei-City-Dashboard-BE/tmp
+
+# macOS 跳過下行（Docker Desktop VM 內已處理 uid）
+# WSL2 / Linux 必跑（避免 air live-reload 寫不進去）
+chmod 777 Taipei-City-Dashboard-BE/tmp 2>/dev/null || true
 ```
 
 ---
@@ -100,6 +133,16 @@ docker exec -i postgres-data psql -U postgres -d dashboard \
 
 ## 5. 啟 BE / FE / Nginx
 
+### 5.A 你的本機 8080 沒被占用（macOS 多半屬於這類）
+
+```bash
+docker compose -f docker/docker-compose.yaml up -d --build dashboard-be
+docker compose -f docker/docker-compose.yaml up -d
+# FE 在 http://localhost:8080，Nginx 在 http://localhost
+```
+
+### 5.B 你的本機 8080 已被占用（WSL2 跑 lineliff phpmyadmin / 其他專案）
+
 ```bash
 docker compose -f docker/docker-compose.yaml \
                -f docker/docker-compose.override.yaml \
@@ -107,10 +150,11 @@ docker compose -f docker/docker-compose.yaml \
 docker compose -f docker/docker-compose.yaml \
                -f docker/docker-compose.override.yaml \
                up -d
+# FE 在 http://localhost:8081，Nginx 在 http://localhost:8082
 ```
 
-> override 把 FE 端口改 8081 / Nginx 改 8082，避開 lineliff phpmyadmin 占用 8080。
-> BE 首次 build 約 5-10 分鐘（含 ONNX runtime + e5 embedder）。
+> override 把 FE 改 8081 / Nginx 改 8082，避開 8080 衝突。
+> BE 首次 build：Intel Mac/Linux/WSL 5-10 分鐘；**Apple Silicon 走 Rosetta 模擬 amd64，預估 10-15 分鐘**。
 
 ---
 
@@ -141,14 +185,14 @@ docker ps --format 'table {{.Names}}\t{{.Status}}' | grep -v lineliff
 
 ### 7.2 服務 URL
 
-| 服務 | URL | 預期 |
-|------|-----|------|
-| 前端 | http://localhost:8081 | 200 |
-| 後端 | http://localhost:8088 | 200 |
-| Nginx | http://localhost:8082 | 200 |
-| pgAdmin | http://localhost:8889 | 302 |
-| Qdrant | http://localhost:6333 | 200 |
-| Airflow | http://localhost:8083 | 302 |
+| 服務 | URL（5.A 沒 override） | URL（5.B 有 override） | 預期 |
+|------|-----|-----|------|
+| 前端 | http://localhost:8080 | http://localhost:8081 | 200 |
+| 後端 | http://localhost:8088 | http://localhost:8088 | 200 |
+| Nginx | http://localhost | http://localhost:8082 | 200 |
+| pgAdmin | http://localhost:8889 | http://localhost:8889 | 302 |
+| Qdrant | http://localhost:6333 | http://localhost:6333 | 200 |
+| Airflow | http://localhost:8083 | http://localhost:8083 | 302 |
 
 ### 7.3 食安儀表板有 7 個 component
 
@@ -226,6 +270,9 @@ docker restart dashboard-fe dashboard-be
 | `network br_dashboard not found` | 回 §1.1 建網路 |
 | `port 8080 already allocated` | override 已改 8081；確認用 `-f docker-compose.override.yaml` |
 | `dashboard-be` exit 127 (vite not found) | 跑 §3 dashboard-fe-init |
+| macOS Docker Desktop 沒啟動，`docker --version` 失敗 | 選單列點 Docker 圖示開啟、等鯨魚變綠 |
+| Apple Silicon BE build 卡住或 OOM | Docker Desktop → Resources 把 RAM 拉到 6GB+；確認 Rosetta 開啟 |
+| macOS 8088 也被占用（罕見） | 不只 override FE/Nginx，要連 BE port 也改；改 docker-compose.override.yaml |
 | `dashboard-be` permission denied on tmp/main | `chmod 777 Taipei-City-Dashboard-BE/tmp` |
 | Airflow init exit 1 | 確認 `Taipei-City-Dashboard-DE/docker/develop/.env` 存在；`docker logs develop-airflow-init-1` |
 | Airflow `could not translate host name "postgres-manager"` | 確認 Airflow override 把 network 設為 `br_dashboard external: true` |
