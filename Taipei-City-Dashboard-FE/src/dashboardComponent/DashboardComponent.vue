@@ -554,7 +554,12 @@ function returnChartComponent(name, svg) {
           <span>arrow_circle_right</span>
         </button>
       </div>
+      <div
+        v-else-if="!mode.includes('map')"
+        class="dashboardcomponent-footer"
+      />
     </div>
+  </div>
   <Teleport to="body">
     <!-- The class "chart-tooltip" could be edited in /assets/styles/chartStyles.css -->
     <TagTooltip
