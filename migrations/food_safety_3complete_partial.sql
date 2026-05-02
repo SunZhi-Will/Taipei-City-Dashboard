@@ -129,23 +129,94 @@ UPDATE query_charts
    SET map_config_ids = ARRAY(SELECT id FROM component_maps WHERE index = 'taipei_imap_food')
  WHERE index = 'taipei_imap_food';
 
--- 6. UPDATE dashboards.components 把新 3 個 id 加進原本 4 個
+-- 5.5 台北版 query_charts（讓 food-safety dashboard ?city=taipei 也顯示這 3 個 component）
+INSERT INTO query_charts (index, query_type, time_from, source, short_desc, long_desc, use_case, query_chart, map_config_ids, city, created_at, updated_at)
+VALUES
+  ('ntpc_food_factory', 'map_legend', 'static', '新北市政府衛生局',
+   '新北市食品工廠登記分布（台北市無資料來源）',
+   '本資料表僅含新北市食品工廠登記。台北市無相關資料。',
+   '對照觀察用',
+   E'SELECT ''食品工廠'' AS name, ''circle'' AS type, ''factory'' AS icon, COUNT(*)::float AS value FROM public.ntpc_food_factory WHERE address LIKE ''臺北市%''',
+   ARRAY(SELECT id FROM component_maps WHERE index = 'ntpc_food_factory'),
+   'taipei', NOW(), NOW()),
+
+  ('taipei_imap_food', 'two_d', 'static', '臺北市政府衛生局',
+   '臺北市食品業者衛生稽查結果分布',
+   '依台北市 iMap 食品業者衛生稽查結果資料分組計數，A1/A2/A3/B1/B2 分級佔比。',
+   '掌握臺北市食品業者稽查合格狀況',
+   E'SELECT result AS x_axis, COUNT(*) AS data FROM public.taipei_imap_food WHERE result IS NOT NULL GROUP BY result ORDER BY result',
+   ARRAY(SELECT id FROM component_maps WHERE index = 'taipei_imap_food'),
+   'taipei', NOW(), NOW()),
+
+  ('wholesale_pesticide_inspection', 'two_d', 'static', '臺北市政府',
+   '臺北市果菜批發市場農藥殘留檢驗',
+   '臺北第一/第二果菜批發市場每月農藥殘留抽驗，合格 vs 不合格件數。',
+   '辨識臺北市場農藥殘留問題',
+   E'SELECT result AS x_axis, COUNT(*) AS data FROM public.wholesale_pesticide_inspection WHERE result IS NOT NULL AND market IN (''第一批發市場'',''第二批發市場'') GROUP BY result ORDER BY result',
+   ARRAY(SELECT id FROM component_maps WHERE index = 'wholesale_pesticide_inspection'),
+   'taipei', NOW(), NOW());
+
+-- 6. dashboard 「食安健康」7 components：單 index + 雙 group pattern
+--    legacy 雙 index（food-safety-metrotaipei / food-safety-taipei）若存在會被清掉
+
+DELETE FROM dashboard_groups
+  WHERE dashboard_id IN (
+    SELECT id FROM dashboards WHERE index IN ('food-safety-metrotaipei','food-safety-taipei')
+  );
+DELETE FROM dashboards
+  WHERE index IN ('food-safety-metrotaipei','food-safety-taipei');
+
 UPDATE dashboards
-SET components = ARRAY(
-  SELECT id FROM components
-   WHERE index IN (
-     'food_poisoning_trend_metrotaipei',
-     'food_poisoning_cause_metrotaipei',
-     'food_poisoning_location_metrotaipei',
-     'food_poisoning_trend_by_cause_metrotaipei',
-     'ntpc_food_factory',
-     'taipei_imap_food',
-     'wholesale_pesticide_inspection'
-   )
-   ORDER BY id
-),
-updated_at = NOW()
-WHERE index = 'food-safety-metrotaipei';
+SET name       = '食安健康',
+    components = ARRAY(
+      SELECT id FROM components
+       WHERE index IN (
+         'food_poisoning_trend_metrotaipei',
+         'food_poisoning_cause_metrotaipei',
+         'food_poisoning_location_metrotaipei',
+         'food_poisoning_trend_by_cause_metrotaipei',
+         'ntpc_food_factory',
+         'taipei_imap_food',
+         'wholesale_pesticide_inspection'
+       )
+       ORDER BY id
+    ),
+    updated_at = NOW()
+WHERE index = 'food-safety';
+
+-- 若 food-safety 還沒被基礎 seed (food_safety_metrotaipei.sql) 建好，這裡也建
+INSERT INTO dashboards (index, name, components, icon, created_at, updated_at)
+SELECT
+  'food-safety',
+  '食安健康',
+  ARRAY(
+    SELECT id FROM components
+     WHERE index IN (
+       'food_poisoning_trend_metrotaipei',
+       'food_poisoning_cause_metrotaipei',
+       'food_poisoning_location_metrotaipei',
+       'food_poisoning_trend_by_cause_metrotaipei',
+       'ntpc_food_factory',
+       'taipei_imap_food',
+       'wholesale_pesticide_inspection'
+     )
+     ORDER BY id
+  ),
+  'restaurant',
+  NOW(),
+  NOW()
+ON CONFLICT (index) DO UPDATE
+  SET name       = EXCLUDED.name,
+      components = EXCLUDED.components,
+      icon       = EXCLUDED.icon,
+      updated_at = NOW();
+
+-- 雙 group：同一 dashboard 掛在 taipei + metrotaipei
+INSERT INTO dashboard_groups (dashboard_id, group_id)
+SELECT d.id, g.id FROM dashboards d, groups g
+WHERE d.index = 'food-safety'
+  AND g.name IN ('taipei', 'metrotaipei')
+ON CONFLICT (dashboard_id, group_id) DO NOTHING;
 
 COMMIT;
 

@@ -8,14 +8,21 @@
 
 ## 0. 重要事實（先讀）
 
-1. **食安儀表板有 7 個 component**（不是 8）：
-   - 4 個食物中毒系列（id 223-226，用 query_charts 的 hardcoded VALUES）
-   - 3 個地圖類（食品工廠 / 衛生稽查 / 蔬果農藥，需要 postgres-data 灌資料表）
+1. **食安儀表板「食安健康」用 single-index dual-group pattern**（學 climate-change）：
+   - 單一 `dashboards.index = 'food-safety'`
+   - 透過 `dashboard_groups` 同時掛在 `taipei` + `metrotaipei` 兩個 group
+   - 側邊欄會在「臺北儀表板」「雙北儀表板」兩處都看到
+   - URL：`/dashboard?index=food-safety&city=taipei`（無下拉）/ `&city=metrotaipei`（有下拉）
+   - **不同於** legacy 的 `ltc_care_tpe + ltc_care_newtpe` 雙 index 寫法
+2. **7 個 component 雙城同步**（雙北 / 台北 都顯示 7 個）：
+   - 4 個食物中毒系列（id 223-226，hardcoded VALUES，雙城版本資料各自）
+   - 3 個地圖類（食品工廠 / 衛生稽查 / 蔬果農藥，台北版過濾為台北市場/業者）
+   - 每個 component 在 `query_charts` 都有 `city='taipei'` + `city='metrotaipei'` 兩 row
    - illegal_food_ad 的 UI 尚未完成（DAG 有但無 GeoJSON、無 component）
-2. **動畫地圖 2 張**：`taipei_imap_food` 與 `wholesale_pesticide_inspection`
+3. **動畫地圖 2 張**：`taipei_imap_food` 與 `wholesale_pesticide_inspection`
    有 `component_maps.property._animate=month, interval_ms=1500`
-3. **路徑無關**：所有指令使用相對路徑，先 `cd` 到專案根即可
-4. **語言**：所有回應、commit message、程式註解一律繁體中文
+4. **路徑無關**：所有指令使用相對路徑，先 `cd` 到專案根即可
+5. **語言**：所有回應、commit message、程式註解一律繁體中文
 
 ---
 

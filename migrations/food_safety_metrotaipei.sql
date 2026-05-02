@@ -105,6 +105,17 @@ INSERT INTO query_charts VALUES ('food_poisoning_trend_metrotaipei', NULL, NULL,
    ) t ORDER BY x_axis, y_axis
    ', NULL, 'metrotaipei');
 
+-- 台北版（為 food-safety dashboard ?city=taipei 顯示）
+INSERT INTO query_charts VALUES ('food_poisoning_trend_metrotaipei', NULL, NULL, NULL, 'static', NULL, NULL, 'day', '臺北市政府衛生局', '臺北市近 5 年食品中毒案件年度趨勢', '臺北市每年食品中毒案件數變化（2020-2024）。', '掌握臺北市食品中毒事件年度高低', NULL, NULL, NOW(), NOW(), 'time', '
+   SELECT x_axis, y_axis, data FROM (
+     SELECT ''2020-12-31''::timestamptz AS x_axis, ''臺北市'' AS y_axis, 28 AS data
+     UNION ALL SELECT ''2021-12-31''::timestamptz, ''臺北市'', 32
+     UNION ALL SELECT ''2022-12-31''::timestamptz, ''臺北市'', 41
+     UNION ALL SELECT ''2023-12-31''::timestamptz, ''臺北市'', 47
+     UNION ALL SELECT ''2024-12-31''::timestamptz, ''臺北市'', 56
+   ) t ORDER BY x_axis
+   ', NULL, 'taipei');
+
 INSERT INTO query_charts VALUES ('food_poisoning_cause_metrotaipei', NULL, NULL, NULL, 'static', NULL, NULL, 'day', '臺北市政府衛生局', '臺北市食品中毒致病原因分佈', '近 5 年臺北市食品中毒事件依致病原因分類佔比。', '識別臺北市主要致病類型', NULL, NULL, NOW(), NOW(), 'two_d', '
    SELECT x_axis, data FROM (VALUES
      (''細菌性'',  118),
@@ -186,13 +197,23 @@ INSERT INTO query_charts VALUES ('food_poisoning_trend_by_cause_metrotaipei', NU
    ', NULL, 'taipei');
 
 -- ----------------------------------------------------------------------------
--- 4. dashboards（雙北食安儀表板）
---    components 陣列用 SELECT 動態取 id，避免硬寫 223-226 撞夥伴環境
+-- 4. dashboard 「食安健康」：單一 index、雙 group pattern（學 climate-change）
+--    URL: /dashboard?index=food-safety&city=taipei    (無下拉，台北固定)
+--    URL: /dashboard?index=food-safety&city=metrotaipei (含下拉，可切雙北/台北)
 -- ----------------------------------------------------------------------------
+
+-- 清掉 legacy 雙 index 設計（如果先前跑過舊版 migration 留下的）
+DELETE FROM dashboard_groups
+  WHERE dashboard_id IN (
+    SELECT id FROM dashboards WHERE index IN ('food-safety-metrotaipei','food-safety-taipei')
+  );
+DELETE FROM dashboards
+  WHERE index IN ('food-safety-metrotaipei','food-safety-taipei');
+
 INSERT INTO dashboards (index, name, components, icon, created_at, updated_at)
-SELECT
-  'food-safety-metrotaipei',
-  '雙北食安儀表板',
+VALUES (
+  'food-safety',
+  '食安健康',
   ARRAY(
     SELECT id FROM components
     WHERE index IN (
@@ -206,6 +227,7 @@ SELECT
   'restaurant',
   NOW(),
   NOW()
+)
 ON CONFLICT (index) DO UPDATE
   SET name       = EXCLUDED.name,
       components = EXCLUDED.components,
@@ -213,13 +235,12 @@ ON CONFLICT (index) DO UPDATE
       updated_at = NOW();
 
 -- ----------------------------------------------------------------------------
--- 5. dashboard_groups（掛到 group 'metrotaipei'）
+-- 5. dashboard_groups（同一個 dashboard 掛在 taipei + metrotaipei 兩個 group）
 -- ----------------------------------------------------------------------------
 INSERT INTO dashboard_groups (dashboard_id, group_id)
-SELECT d.id, g.id
-FROM dashboards d, groups g
-WHERE d.index = 'food-safety-metrotaipei'
-  AND g.name  = 'metrotaipei'
+SELECT d.id, g.id FROM dashboards d, groups g
+WHERE d.index = 'food-safety'
+  AND g.name IN ('taipei', 'metrotaipei')
 ON CONFLICT (dashboard_id, group_id) DO NOTHING;
 
 COMMIT;
