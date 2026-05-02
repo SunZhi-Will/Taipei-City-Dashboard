@@ -547,6 +547,7 @@ export const useMapStore = defineStore("map", {
 			if (zoom >= 14) return 0.0015;
 			if (zoom >= 12) return 0.002;
 			return 0.003;
+		},
 		// Animate through months (monthly_flat: setFilter only)
 		animateMonths(index, intervalMs = 1500) {
 			this.stopMonthAnimation();
