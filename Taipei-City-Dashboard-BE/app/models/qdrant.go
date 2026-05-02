@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"path/filepath"
 
 	"github.com/sugarme/tokenizer"
@@ -92,14 +93,21 @@ func queryQdrant(queryVector []float32, limit int, scoreThreshold float64) (Qdra
 	return result, nil
 }
 
+const ortLibPath = "/usr/lib/libonnxruntime.so"
+
 func InitLmSession() *ort.DynamicSession[int64, float32] {
 	LMConfig := global.LM
 
-	// 1) ONNX Runtime 初始化
-	ort.SetSharedLibraryPath("/usr/lib/libonnxruntime.so") // 設定共享函式庫路徑
+	// 1) ONNX Runtime 初始化：先確認 .so 存在，否則跳過（輕量模式）
+	if _, err := os.Stat(ortLibPath); os.IsNotExist(err) {
+		log.Println("[WARN] ONNX Runtime not found — skipping LM session init (lightweight mode)")
+		return nil
+	}
+	ort.SetSharedLibraryPath(ortLibPath)
 
 	if err := ort.InitializeEnvironment(); err != nil {
-		log.Fatalf("InitializeEnvironment error: %v", err)
+		log.Printf("InitializeEnvironment error: %v (AI features disabled)", err)
+		return nil
 	}
 
 	// 2) 模型路徑
@@ -127,21 +135,26 @@ func InitLmSession() *ort.DynamicSession[int64, float32] {
 
 	session, err := ort.NewDynamicSession[int64, float32](modelPath, inputNames, outputNames)
 	if err != nil {
-		log.Fatalf("NewDynamicSession error: %v", err)
+		log.Printf("NewDynamicSession error: %v (AI features disabled)", err)
+		return nil
 	}
 
 	return session
 }
 
 func InitTokenizer() *tokenizer.Tokenizer {
-    modelDir := global.LM.ModelPath
-    tokenizerPath := filepath.Join(modelDir, "tokenizer.json")
+	modelDir := global.LM.ModelPath
+	tokenizerPath := filepath.Join(modelDir, "tokenizer.json")
+	if _, err := os.Stat(tokenizerPath); os.IsNotExist(err) {
+		log.Println("[WARN] Tokenizer not found — skipping tokenizer init (lightweight mode)")
+		return nil
+	}
 	tk, err := pretrained.FromFile(tokenizerPath)
-    if err != nil {
-        // 啟動時失敗就報警並停止，這比執行中當機好找原因
-        log.Fatalf("Critical: Failed to load tokenizer: %v", err)
-    }
-    return tk
+	if err != nil {
+		log.Printf("Failed to load tokenizer: %v (AI features disabled)", err)
+		return nil
+	}
+	return tk
 }
 
 func GenVector(inputText string) ([]float32, error) {

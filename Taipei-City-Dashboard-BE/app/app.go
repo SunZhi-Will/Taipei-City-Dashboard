@@ -77,8 +77,10 @@ func StartApplication() {
 	cache.CloseConnect()
 
 	// If the server stops, close the lm session and environment
-	global.LMSession.Destroy()
-	ort.DestroyEnvironment()
+	if global.LMSession != nil {
+		global.LMSession.Destroy()
+		ort.DestroyEnvironment()
+	}
 	
 }
 

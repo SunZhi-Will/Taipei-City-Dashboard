@@ -33,10 +33,14 @@ def _wholesale_pesticide_inspection(**kwargs):
     NTPM_LIST = "https://www.ntpm.com.tw/NewsList.aspx/9"
     NTPM_DETAIL_BASE = "https://www.ntpm.com.tw"
 
+    # 掃描 TAPMC 歷史的回溯天數（可透過環境變數或 dag_run.conf 覆蓋）
+    import os
+    TAPMC_DAYS_BACK = int(os.environ.get("TAPMC_DAYS_BACK", "60"))
+
     session = requests.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0"})
 
-    def list_recent_news(list_url, detail_pattern, limit=10):
+    def list_recent_news(list_url, detail_pattern, limit=50):
         resp = session.get(list_url, timeout=30)
         resp.raise_for_status()
         urls = re.findall(detail_pattern, resp.text)
@@ -50,18 +54,48 @@ def _wholesale_pesticide_inspection(**kwargs):
                 break
         return out
 
+    def list_tapmc_news_by_scan(days_back=60):
+        """TAPMC 農藥類（序號2xx）清單頁只顯示最新5筆，
+        改為直接掃描回溯 days_back 天內每天的 N<roc年月日>2xx ID。"""
+        today = datetime.now()
+        found = []
+        seen = set()
+        for offset in range(days_back):
+            dt = today - timedelta(days=offset)
+            roc_year = dt.year - 1911
+            roc_str = f"{roc_year:03d}{dt.month:02d}{dt.day:02d}"
+            for seq_num in range(1, 11):  # 嘗試 201 到 210
+                seq = f"2{seq_num:02d}"
+                nid = f"N{roc_str}{seq}"
+                if nid in seen:
+                    continue
+                seen.add(nid)
+                path = f"/Pages/NewsDtl/{nid}"
+                url = TAPMC_DETAIL_BASE + path
+                try:
+                    r = session.head(url, timeout=5, allow_redirects=False)
+                    if r.status_code == 200:
+                        found.append(path)
+                        print(f"[tapmc] found: {nid}")
+                except Exception:
+                    pass
+        # 同時也從清單頁抓（確保最新的不漏）
+        try:
+            resp = session.get(TAPMC_LIST, timeout=30)
+            list_ids = re.findall(r'(/Pages/NewsDtl/N\d{10})', resp.text)
+            for path in list_ids:
+                if path not in found:
+                    found.append(path)
+                    print(f"[tapmc] from list: {path}")
+        except Exception as e:
+            print(f"[tapmc] list page error: {e}")
+        return found
+
     def get_pdf_url(detail_url):
         resp = session.get(detail_url, timeout=30)
         resp.raise_for_status()
         m = re.search(r'href="(/DL\.ashx\?f=[A-F0-9]+&s=Web_News)"', resp.text)
         return m.group(1) if m else None
-
-    def download_pdf(url):
-        full_url = url if url.startswith("http") else (TAPMC_DETAIL_BASE if "tapmc" in url else NTPM_DETAIL_BASE) + url
-        # detect base by current context — simplest: attempt both
-        resp = session.get(full_url, timeout=60)
-        resp.raise_for_status()
-        return resp.content
 
     def roc_to_date(s):
         # 1150428 → 2026-04-28；115/04/28 → 2026-04-28
@@ -77,8 +111,9 @@ def _wholesale_pesticide_inspection(**kwargs):
     rows = []
 
     # === 北農（tapmc）：只列不合格 ===
-    tapmc_detail_pattern = r'href="(/Pages/NewsDtl/N\d{10})"'
-    tapmc_news = list_recent_news(TAPMC_LIST, tapmc_detail_pattern, limit=10)
+    # 改用掃描方式取代清單頁，確保不漏掉歷史文章
+    tapmc_news = list_tapmc_news_by_scan(days_back=TAPMC_DAYS_BACK)
+    print(f"[tapmc] 共找到 {len(tapmc_news)} 篇文章")
     for path in tapmc_news:
         try:
             detail_url = TAPMC_DETAIL_BASE + path
@@ -117,7 +152,7 @@ def _wholesale_pesticide_inspection(**kwargs):
 
     # === 新北農（ntpm）：列全部抽檢 ===
     ntpm_detail_pattern = r'href="(/NewsDetail/[A-F0-9]+)"'
-    ntpm_news = list_recent_news(NTPM_LIST, ntpm_detail_pattern, limit=10)
+    ntpm_news = list_recent_news(NTPM_LIST, ntpm_detail_pattern, limit=50)
     for path in ntpm_news:
         try:
             detail_url = NTPM_DETAIL_BASE + path

@@ -4,11 +4,11 @@ ARG HF_TOKEN   # 若你有 Hugging Face 私有模型或想提高速率，可傳 
 ENV HF_HOME=/root/.cache/huggingface
 WORKDIR /w
 
-# 安裝匯出所需套件
-RUN pip install --no-cache-dir \
+# 先裝 CPU-only torch，避免 pip 自動拉 CUDA 版（2GB+）導致 OOM
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir \
       "transformers>=4.44" \
-      "optimum[onnxruntime]>=1.20.0" \
-      onnxruntime
+      "optimum[onnxruntime]>=1.20.0"
 
 # 匯出：feature-extraction
 # 產出到 /out/onnx-e5
@@ -112,7 +112,10 @@ RUN set -eux; \
 ENV LD_LIBRARY_PATH=/usr/lib
 ENV GOCACHE=/tmp/go-build-cache
 
-COPY --from=model_export /out/onnx-e5 /opt/lm_model/onnx-e5
+# Install Air for backend hot reload in local Docker development.
+RUN go install github.com/air-verse/air@v1.61.7
+
+RUN mkdir -p /opt/lm_model/onnx-e5
 
 WORKDIR /app
 EXPOSE 8080
