@@ -34,6 +34,22 @@
       "problemMatcher": []
     },
     {
+      "label": "docker:airflow-up",
+      "type": "shell",
+      "shell": {
+        "executable": "bash",
+        "args": ["-c"]
+      },
+      "command": ".vscode/scripts/docker-task.sh airflow-up",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "docker:down",
       "type": "shell",
       "shell": {
@@ -41,6 +57,22 @@
         "args": ["-c"]
       },
       "command": ".vscode/scripts/docker-task.sh down",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "docker:status",
+      "type": "shell",
+      "shell": {
+        "executable": "bash",
+        "args": ["-c"]
+      },
+      "command": ".vscode/scripts/docker-task.sh status",
       "presentation": {
         "echo": true,
         "reveal": "always",

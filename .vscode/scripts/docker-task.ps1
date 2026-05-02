@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('quick-up', 'bootstrap-full', 'down', 'status')]
+    [ValidateSet('quick-up', 'bootstrap-full', 'airflow-up', 'down', 'status')]
     [string]$Action = 'quick-up'
 )
 
@@ -46,7 +46,11 @@ function Use-WindowsDocker {
             Write-Host "INFO: First-time setup detected. Running bootstrap..." -ForegroundColor Cyan
             & $DockerCmd compose -f docker-compose-db.yaml up -d
             Start-Sleep -Seconds 8
-            & $DockerCmd compose -f docker-compose-init.yaml up
+            Write-Host "INFO: Installing frontend dependencies (npm ci)..." -ForegroundColor Cyan
+            & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-fe-init
+            & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager
+            & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard
+            & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations
         }
         Write-Host "INFO: Starting database services..." -ForegroundColor Cyan
         & $DockerCmd compose -f docker-compose-db.yaml up -d
@@ -67,7 +71,11 @@ function Use-WindowsDocker {
         & $DockerCmd compose -f docker-compose-db.yaml up -d
         Write-Host "INFO: Waiting for database services to be ready (15 seconds)..." -ForegroundColor Cyan
         Start-Sleep -Seconds 15
-        & $DockerCmd compose -f docker-compose-init.yaml up
+        Write-Host "INFO: Installing frontend dependencies (npm ci)..." -ForegroundColor Cyan
+        & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-fe-init
+        & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager
+        & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard
+        & $DockerCmd compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations
         Write-Host "INFO: Starting application services..." -ForegroundColor Cyan
         & $DockerCmd compose -f docker-compose.yaml up -d --build
         Start-Sleep -Seconds 3
@@ -75,6 +83,23 @@ function Use-WindowsDocker {
         Write-Host "OK: Bootstrap complete. Services started:" -ForegroundColor Green
         & $DockerCmd compose -f docker-compose.yaml ps
         & $DockerCmd compose -f docker-compose-db.yaml ps
+        return
+    }
+
+    if ($ActionName -eq 'airflow-up') {
+        $deDir = Join-Path $PSScriptRoot '..\..\Taipei-City-Dashboard-DE\docker\develop'
+        $deEnv = Join-Path $deDir '.env'
+        if (-not (Test-Path $deEnv)) {
+            Write-Warning "$deEnv not found! Copy .env.template and fill in the values."
+            exit 1
+        }
+        Write-Host "INFO: Starting Airflow (DE) services..." -ForegroundColor Cyan
+        Push-Location $deDir
+        & $DockerCmd compose up -d
+        Pop-Location
+        Write-Host "OK: Airflow services started." -ForegroundColor Green
+        Write-Host "INFO: Airflow UI: http://localhost:8080/airflow-sit" -ForegroundColor Yellow
+        Write-Host "NOTE: Port 8080 conflicts with dashboard-fe. Stop FE first or use a separate host." -ForegroundColor Yellow
         return
     }
 
@@ -111,7 +136,7 @@ function Use-WSLDocker {
         $isInit = (& wsl.exe -d $Distro sh -lc "docker volume ls --format '{{.Name}}' | grep -x 'postgres_data' >/dev/null; echo `$?").Trim()
         if ($isInit -ne '0') {
             Write-Host "INFO: First-time setup detected. Running bootstrap..." -ForegroundColor Cyan
-            & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations"
+            & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-fe-init && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations"
         }
         & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && docker compose -f docker-compose.yaml up -d"
         Write-Host ""
@@ -121,10 +146,32 @@ function Use-WSLDocker {
     }
 
     if ($ActionName -eq 'bootstrap-full') {
-        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 5 && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations && docker compose -f docker-compose.yaml up -d --build dashboard-be && docker compose -f docker-compose.yaml up -d"
+        & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose-db.yaml up -d && sleep 15 && docker compose -f docker-compose-init.yaml run --rm dashboard-fe-init && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-manager && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-dashboard && docker compose -f docker-compose-init.yaml run --rm dashboard-be-init-migrations && docker compose -f docker-compose.yaml up -d --build dashboard-be && docker compose -f docker-compose.yaml up -d"
         Write-Host ""
         Write-Host "OK: Bootstrap complete. Services started:" -ForegroundColor Green
         & wsl.exe -d $Distro sh -lc "cd '$wslDockerDir' && docker compose -f docker-compose.yaml ps"
+        return
+    }
+
+    if ($ActionName -eq 'airflow-up') {
+        $deDir = Join-Path $PSScriptRoot '..\..\Taipei-City-Dashboard-DE\docker\develop'
+        $wslDeDir = (& wsl.exe -d $Distro wslpath -a (($deDir | Resolve-Path) -replace '\\', '/')).Trim()
+        if (-not $wslDeDir) {
+            Write-Error "WSL path conversion failed: $deDir"
+            exit 2
+        }
+
+        $deEnvCheck = (& wsl.exe -d $Distro sh -lc "[ -f '$wslDeDir/.env' ]; echo `$?").Trim()
+        if ($deEnvCheck -ne '0') {
+            Write-Warning "$deDir\.env not found! Copy .env.template and fill in the values."
+            exit 1
+        }
+
+        Write-Host "INFO: Starting Airflow (DE) services..." -ForegroundColor Cyan
+        & wsl.exe -d $Distro sh -lc "cd '$wslDeDir' && docker compose up -d"
+        Write-Host "OK: Airflow services started." -ForegroundColor Green
+        Write-Host "INFO: Airflow UI: http://localhost:8080/airflow-sit" -ForegroundColor Yellow
+        Write-Host "NOTE: Port 8080 conflicts with dashboard-fe. Stop FE first or use a separate host." -ForegroundColor Yellow
         return
     }
 
