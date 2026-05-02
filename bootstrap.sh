@@ -108,6 +108,17 @@ docker exec -i postgres-manager psql -U postgres -d dashboardmanager \
 docker exec -i postgres-manager psql -U postgres -d dashboardmanager \
   < migrations/food_safety_3complete_partial.sql >/dev/null
 
+# ─── Step 8.5: 食安資料表（給「以前部署過」的夥伴補資料；新部署已從 demo 灌入） ──
+FOOD_ROWS=$(docker exec postgres-data psql -U postgres -d dashboard -tAc \
+  "SELECT count(*) FROM public.taipei_imap_food" 2>/dev/null || echo 0)
+if [ "${FOOD_ROWS:-0}" -lt 100 ]; then
+  log "食安資料表為空或不存在（目前 $FOOD_ROWS 行），灌入 food_safety_data.sql"
+  docker exec -i postgres-data psql -U postgres -d dashboard \
+    < db-sample-data/food_safety_data.sql >/dev/null
+else
+  log "食安資料表已有 $FOOD_ROWS 行，跳過 food_safety_data.sql"
+fi
+
 # ─── Step 9: 偵測 port 8080 是否被占 ─────────────────────────
 USE_OVERRIDE=""
 PORT_FE=8080; PORT_NGINX=80
