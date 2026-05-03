@@ -444,6 +444,13 @@ function returnChartComponent(name, svg) {
           </button>
         </div>
       </div>
+      <!-- Data period label -->
+      <div
+        v-if="chartPeriodLabel && mode !== 'preview'"
+        class="dashboardcomponent-period"
+      >
+        {{ chartPeriodLabel }}
+      </div>
       <!-- Main Content -->
       <div
         v-if="mode === 'preview'"
@@ -489,7 +496,6 @@ function returnChartComponent(name, svg) {
           'halfmapopen-chart': mode === 'halfmap',
         }"
       >
-        <div v-if="chartPeriodLabel" class="dashboardcomponent-period">{{ chartPeriodLabel }}</div>
         <component
           :is="returnChartComponent(item)"
           v-for="item in config.chart_config.types"
@@ -865,12 +871,14 @@ button:hover {
 	}
 
 	&-period {
-		font-size: 0.75rem;
+		font-size: 0.72rem;
 		font-weight: 700;
 		color: var(--color-highlight);
 		letter-spacing: 0.04em;
 		text-align: right;
-		padding: 2px 4px 4px;
+		padding: 2px 0 4px;
+		opacity: 0.85;
+		flex-shrink: 0;
 	}
 
 	&-chart,
