@@ -105,6 +105,29 @@ function formatMonthLabel(ym) {
 	return `${y} 年 ${parseInt(m, 10)} 月`;
 }
 
+// Static period label: derived from series x-values, or falls back to current month
+const staticPeriodLabel = computed(() => {
+	const dates = [];
+	if (props.series?.length) {
+		for (const s of props.series) {
+			if (s.x && typeof s.x === "string" && /^\d{4}-\d{2}/.test(s.x)) dates.push(s.x.slice(0, 7));
+			if (Array.isArray(s.data)) {
+				for (const pt of s.data) {
+					if (pt?.x && typeof pt.x === "string" && /^\d{4}-\d{2}/.test(pt.x)) dates.push(pt.x.slice(0, 7));
+				}
+			}
+		}
+	}
+	if (dates.length) {
+		dates.sort();
+		const latest = dates[dates.length - 1];
+		const [y, m] = latest.split("-");
+		return `${y} 年 ${parseInt(m, 10)} 月`;
+	}
+	const now = new Date();
+	return `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
+});
+
 function togglePlay() {
 	if (!isMapLinkedMode.value) return;
 	if (isPlaying.value) {
@@ -317,6 +340,7 @@ function handleDataSelection(_e, _chartContext, config) {
       >
       <span class="donutchart-anim-month">{{ formatMonthLabel(currentMonth) }}</span>
     </div>
+    <div v-else class="donutchart-period">{{ staticPeriodLabel }}</div>
 
     <div class="donutchart">
       <VueApexCharts
@@ -360,6 +384,18 @@ function handleDataSelection(_e, _chartContext, config) {
 	min-height: 0;  /* allow flex shrink */
 	gap: 2px;
 	overflow: hidden;
+}
+
+/* 靜態期間標籤 */
+.donutchart-period {
+	flex-shrink: 0;
+	font-size: 0.78rem;
+	font-weight: 700;
+	color: var(--color-highlight);
+	letter-spacing: 0.04em;
+	padding: 3px 0 5px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	text-align: right;
 }
 
 /* 時間控制：單排緊湊版 */
