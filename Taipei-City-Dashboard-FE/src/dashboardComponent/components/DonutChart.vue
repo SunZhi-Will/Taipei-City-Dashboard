@@ -13,6 +13,7 @@ const props = defineProps([
 	"map_config",
 	"map_filter",
 	"map_filter_on",
+	"showColorLegend",
 ]);
 
 const emits = defineEmits([
@@ -23,6 +24,10 @@ const emits = defineEmits([
 	"fly"
 ]);
 
+function toFiniteNumber(value) {
+	const parsed = typeof value === "number" ? value : Number(value);
+	return Number.isFinite(parsed) ? parsed : 0;
+}
 const timeStore = useTimeStore();
 const mapStore  = useMapStore();
 
@@ -322,6 +327,22 @@ function handleDataSelection(_e, _chartContext, config) {
         <h6>{{ sum }}</h6>
       </div>
     </div>
+		<div
+			v-if="showColorLegend"
+			class="donutchart-legend"
+		>
+			<div
+				v-for="item in donutLegendItems"
+				:key="`legend-${item.label}`"
+				class="donutchart-legend-item"
+			>
+				<span
+					class="donutchart-legend-swatch"
+					:style="{ backgroundColor: item.color }"
+				/>
+				<span class="donutchart-legend-label">{{ item.label }}</span>
+			</div>
+		</div>
   </div>
 </template>
 
@@ -423,6 +444,13 @@ function handleDataSelection(_e, _chartContext, config) {
 	position: relative;
 	overflow: hidden;
 
+	:deep(.vue-apexcharts),
+	:deep(.apexcharts-canvas),
+	:deep(.apexcharts-svg) {
+		width: 100% !important;
+		height: 100% !important;
+	}
+
 	&-title {
 		display: flex;
 		align-items: center;
@@ -441,6 +469,43 @@ function handleDataSelection(_e, _chartContext, config) {
 			color: var(--color-complement-text);
 			font-size: var(--font-m);
 			font-weight: 400;
+		}
+	}
+
+	&-legend {
+		position: absolute;
+		left: 12px;
+		right: 12px;
+		bottom: 8px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+		align-items: center;
+		justify-content: center;
+		padding: 6px 10px;
+		border-radius: 10px;
+		background: rgba(2, 6, 23, 0.45);
+		backdrop-filter: blur(4px);
+		pointer-events: none;
+
+		&-item {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		&-swatch {
+			width: 10px;
+			height: 10px;
+			border-radius: 999px;
+			flex-shrink: 0;
+			border: 1px solid rgba(255, 255, 255, 0.3);
+		}
+
+		&-label {
+			color: rgba(226, 232, 240, 0.95);
+			font-size: 12px;
+			line-height: 1.2;
 		}
 	}
 }

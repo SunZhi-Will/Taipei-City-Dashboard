@@ -10,6 +10,10 @@ const serverConfig = isDockerCompose
 		// Docker Compose override config
 		host: "0.0.0.0",
 		port: 80, // 如有需要可變更 port
+		watch: {
+			usePolling: true,
+			interval: Number(process?.env.CHOKIDAR_INTERVAL || 300), // eslint-disable-line no-undef
+		},
 		proxy: {
 			"/api/dev": {
 				target: "http://dashboard-be:8080",
@@ -22,6 +26,11 @@ const serverConfig = isDockerCompose
 		host: "0.0.0.0",
 		port: 80,
 		proxy: {
+			"/api/dev": {
+				target: "https://citydashboard.taipei",
+				changeOrigin: true,
+				rewrite: (path) => path.replace(/^\/api\/dev/, "/api/v1")
+			},
 			"/api": {
 				target: "https://citydashboard.taipei/api/v1",
 				changeOrigin: true,

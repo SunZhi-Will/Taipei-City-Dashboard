@@ -26,7 +26,7 @@ export class CityManager {
                 expandedName: "臺北儀表板",
 				collapsedName: "臺北",
                 enabled: true,
-                selectList: ["taipei"],
+                selectList: ["taipei", "metrotaipei"],
                 tagList: ["taipei"],
             },
         ],

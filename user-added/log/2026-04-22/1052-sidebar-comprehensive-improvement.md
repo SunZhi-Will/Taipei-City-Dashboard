@@ -1,0 +1,55 @@
+# 左側導覽全面改善 / Comprehensive Sidebar Improvement
+
+## 2026-04-22 10:52
+
+- objective:
+  - 改善左側導覽列的收合體驗、視覺一致性、互動可用性與主題可維護性。
+
+- files:
+  - Taipei-City-Dashboard-FE/src/components/utilities/bars/SideBar.vue
+  - Taipei-City-Dashboard-FE/src/components/utilities/miscellaneous/SideBarTab.vue
+  - Taipei-City-Dashboard-FE/src/assets/styles/globalStyles.css
+- summary:
+  - 側欄收合/展開狀態改為明確 key 並持久化；群組折疊狀態新增 localStorage 持久化與恢復邏輯。
+  - 導覽項目（tab）改為 pill 視覺語言，重做 hover/active 狀態，統一 icon 尺寸與文字收合動畫。
+  - 側欄容器改為 token 驅動的漸層背景、陰影與邊框，收合寬度改為 3.5rem，展開寬度改為 18rem。
+  - 補充 sidebar 專用色彩 token，降低硬編碼色值，提升主題一致性與後續擴充性。
+- change-type:
+  - Changed
+- technical-details:
+  - `SideBar.vue`:
+  - 新增 `dashboard.sidebar.expanded` 與 `dashboard.sidebar.collapsedGroups` 兩個 storage keys。
+  - 新增 `restoreCollapsedStates()` 與標準化初始化流程，避免城市列表變動時遺失展開狀態。
+  - 使用 `watch(collapsedStates, { deep: true })` 持續同步群組狀態到 localStorage。
+  - 將多處 section label 改為可動畫收合的 `sidebar-label`，保留 icon 導向能力。
+  - 重構 sidebar 容器樣式：寬度、漸層、陰影、scrollbar、pills 與 hover 體驗。
+  - `SideBarTab.vue`:
+  - 新增 `sidebartab-collapsed`、`sidebartab-label`、`sidebartab-icon`，以 max-width + opacity 實作文字收合動畫。
+  - 導覽項 active 狀態改為 token 化背景與邊框，保留高亮色識別。
+  - 新增 `title` 與 `aria-current` 增進收合態可讀性與可及性。
+  - `globalStyles.css`:
+  - 新增 sidebar 專用 token：背景漸層、hover/active、邊框、陰影、scrollbar、muted text。
+- verification:
+  - 執行 VS Code diagnostics 檢查：
+  - `get_errors` -> `SideBar.vue`: No errors found
+  - `get_errors` -> `SideBarTab.vue`: No errors found
+  - `get_errors` -> `globalStyles.css`: No errors found
+  - 手動檢查重點（建議）：
+  - dashboard/mapview 頁面切換後，收合狀態與群組折疊狀態是否保持。
+  - 收合狀態下，icon 導覽是否可正常點擊且 tooltip title 可讀。
+- performance-impact:
+  - 樣式調整與 localStorage 同步僅屬輕量操作，預期對互動延遲影響可忽略。
+  - 新增 transition 為 CSS 層，無額外執行緒負擔。
+- impact-risk:
+  - 風險：側欄寬度從 200px 改為 18rem，可能在特定版面造成內容區可視寬變化。
+  - 已緩解：保留收合模式，且沿用既有 `hide-if-mobile` 行為，避免手機端回歸風險。
+- regression-test:
+  - 驗證 dashboard/mapview/admin/component 路由切換，不影響主要佈局。
+  - 驗證登入/登出後私人與公共群組可正常展開/收合。
+  - 驗證 city 清單動態變更時，既有 collapsed key 不衝突。
+- traceability:
+  - log: user-added/log/2026-04-22/1052-sidebar-comprehensive-improvement.md
+  - ticket/PR/commit: N/A
+- next-actions:
+  - P1: 將 MobileNavigation.vue 同步套用相同 sidebar token，統一桌機/行動外觀語言。
+  - P2: 如需進一步 AppShell 化，可抽離 SidebarSection 與 SidebarItem 子元件。

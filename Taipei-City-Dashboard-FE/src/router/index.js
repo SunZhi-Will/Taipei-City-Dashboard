@@ -18,6 +18,7 @@ import MapView from "../views/MapView.vue";
 import ComponentView from "../views/ComponentView.vue";
 import ComponentInfoView from "../views/ComponentInfoView.vue";
 import EmbedView from "../views/EmbedView.vue";
+import AIStudioView from "../views/AIStudioView.vue";
 
 const routes = [
 	{
@@ -38,6 +39,11 @@ const routes = [
 		path: "/mapview",
 		name: "mapview",
 		component: MapView,
+	},
+	{
+		path: "/ai-studio",
+		name: "ai-studio",
+		component: AIStudioView,
 	},
 	{
 		path: "/component",
@@ -93,6 +99,11 @@ const routes = [
 		component: () => import("../views/admin/AdminDisaster.vue"),
 	},
 	{
+		path: "/admin/ai-stats",
+		name: "admin-ai-stats",
+		component: () => import("../views/admin/AdminAiStats.vue"),
+	},
+	{
 		path: "/:pathMatch(.*)*",
 		name: "notFoundRedirect",
 		redirect: "/dashboard",
@@ -121,7 +132,7 @@ router.beforeEach((to) => {
 	const authStore = useAuthStore();
 	if (authStore.isMobileDevice && authStore.isNarrowDevice) {
 		if (
-			!["dashboard", "component-info", "callback", "embed", "mapview"].includes(
+			!["dashboard", "component-info", "callback", "embed", "mapview", "ai-studio"].includes(
 				to.name
 			)
 		) {
@@ -183,9 +194,9 @@ router.beforeEach((to) => {
 	if (to.name === "component-info") {
 		contentStore.getCurrentComponentData(to.params.index, to.query.city);
 	}
-	// Clear the entire mapStore if the path doesn't start with /mapview
+	// When leaving /mapview, fully destroy Mapbox instance to avoid canvas residue.
 	if (to.path.toLowerCase() !== "/mapview") {
-		mapStore.clearEntireMap();
+		mapStore.destroyMapBox();
 	}
 	// Clear only map layers if the path starts with /mapview
 	else if (to.path.toLowerCase() === "/mapview") {

@@ -12,6 +12,7 @@ package app
 
 import (
 	"TaipeiCityDashboardBE/app/cache"
+	"TaipeiCityDashboardBE/app/controllers"
 	"TaipeiCityDashboardBE/app/initial"
 	"TaipeiCityDashboardBE/app/middleware"
 	"TaipeiCityDashboardBE/app/models"
@@ -35,8 +36,22 @@ func StartApplication() {
 	cache.ConnectToRedis()
 	initial.InitCronJobs()
 
-	global.LMSession = models.InitLmSession()
-	global.LMTokenizer = models.InitTokenizer()
+	if lmSession, err := models.InitLmSession(); err != nil {
+		logs.FWarn("LM session init failed, vector search will be unavailable: %v", err)
+	} else {
+		global.LMSession = lmSession
+	}
+
+	if lmTokenizer, err := models.InitTokenizer(); err != nil {
+		logs.FWarn("LM tokenizer init failed, vector search will be unavailable: %v", err)
+	} else {
+		global.LMTokenizer = lmTokenizer
+	}
+
+	// Initialize component indexer for Vue components (NEW)
+	if err := controllers.InitComponentIndexer("", global.Qdrant.Url); err != nil {
+		logs.FWarn("Component indexer init failed: %v", err)
+	}
 
 	// 2. Initiate default Gin router with logger and recovery middleware
 	routes.Router = gin.Default()
@@ -79,8 +94,8 @@ func StartApplication() {
 	// If the server stops, close the lm session and environment
 	if global.LMSession != nil {
 		global.LMSession.Destroy()
-		ort.DestroyEnvironment()
 	}
+	ort.DestroyEnvironment()
 	
 }
 

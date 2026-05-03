@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -79,6 +80,18 @@ type CityComponentScore struct{
 	Name           string          `json:"name"`
 	City		   string          `json:"city"`
 	Score 		   float64         `json:"score"`
+}
+
+// CityComponentScoreRich extends CityComponentScore with chart/map metadata for AI planning.
+type CityComponentScoreRich struct {
+	ID         int64    `json:"id"`
+	Index      string   `json:"index"`
+	Name       string   `json:"name"`
+	City       string   `json:"city"`
+	Score      float64  `json:"score"`
+	ShortDesc  string   `json:"short_desc"`
+	ChartTypes []string `json:"chart_types"` // e.g. ["bar","line","percent"]
+	HasMap     bool     `json:"has_map"`     // true if map_config is non-empty
 }
 
 // ComponentMap is the model for the component_maps table.
@@ -258,79 +271,159 @@ func GetComponentByIDAll(id int) (component []CityComponent, err error) {
 }	
 
 func GetComponentByQueryVector(queryString string, limit int, scoreThreshold float64) (component []CityComponentScore, err error) {
-	vector, err := GenVector(queryString)
+	rich, err := GetComponentByQueryVectorRich(queryString, limit, scoreThreshold)
 	if err != nil {
 		return component, err
+	}
+	for _, r := range rich {
+		component = append(component, CityComponentScore{
+			ID: r.ID, Index: r.Index, Name: r.Name, City: r.City, Score: r.Score,
+		})
+	}
+	return component, nil
+}
+
+// GetComponentByQueryVectorRich returns vector search results enriched with chart types and map presence.
+func GetComponentByQueryVectorRich(queryString string, limit int, scoreThreshold float64) ([]CityComponentScoreRich, error) {
+	vector, err := GenVector(queryString)
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := queryQdrant(vector, limit, scoreThreshold)
 	if err != nil {
-		return component, err
+		return nil, err
 	}
 
 	points := result.Result.Points
+	if len(points) == 0 {
+		return []CityComponentScoreRich{}, nil
+	}
 
-	var queryOutput []map[string]interface{}
+	// Build base results from Qdrant
+	type qdrantItem struct {
+		id    int64
+		index string
+		name  string
+		city  string
+		score float64
+	}
+	items := make([]qdrantItem, 0, len(points))
+	ids := make([]int64, 0, len(points))
+
 	for _, p := range points {
 		payload := p.Payload
 		roundedScore := math.Round(p.Score*10000) / 10000
-
-		entry := map[string]interface{}{
-			"id":    payload["id"],
-			"index": payload["index"],
-			"name":  payload["name"],
-			"city":  payload["city"],
-			"score": roundedScore,
+		var id int64
+		switch v := payload["id"].(type) {
+		case float64:
+			id = int64(v)
+		case string:
+			id, _ = strconv.ParseInt(v, 10, 64)
 		}
-
-		queryOutput = append(queryOutput, entry)
+		items = append(items, qdrantItem{
+			id:    id,
+			index: fmt.Sprintf("%v", payload["index"]),
+			name:  fmt.Sprintf("%v", payload["name"]),
+			city:  fmt.Sprintf("%v", payload["city"]),
+			score: roundedScore,
+		})
+		ids = append(ids, id)
 	}
 
-	for _, item := range queryOutput {
-		c := CityComponentScore{}
-		
-		// Safe conversion for ID
-		if idVal, ok := item["id"]; ok {
-			switch v := idVal.(type) {
-			case float64:
-				c.ID = int64(v)
-			case string:
-				c.ID, _ = strconv.ParseInt(v, 10, 64)
-			case int:
-				c.ID = int64(v)
-			case int64:
-				c.ID = v
-			}
-		}
+	// Batch-fetch chart_config + map_config + short_desc from DB
+	type compMeta struct {
+		ID         int64  `gorm:"column:id"`
+		ChartTypes string `gorm:"column:chart_types"` // JSON array string
+		HasMap     bool   `gorm:"column:has_map"`
+		ShortDesc  string `gorm:"column:short_desc"`
+	}
+	var metas []compMeta
+	// hasMap: true when map_config_ids is not empty
+	DBManager.Raw(`
+		SELECT c.id,
+			   cc.types::text AS chart_types,
+			   (qc.map_config_ids IS NOT NULL AND array_length(qc.map_config_ids,1) > 0) AS has_map,
+			   qc.short_desc
+		FROM components c
+		JOIN component_charts cc ON c.index = cc.index
+		JOIN query_charts qc ON c.index = qc.index
+		WHERE c.id = ANY(?)
+	`, pq.Array(ids)).Scan(&metas)
 
-		// Safe conversion for Index
-		if indexVal, ok := item["index"]; ok {
-			c.Index = fmt.Sprintf("%v", indexVal)
-		}
-
-		// Safe conversion for Name
-		if nameVal, ok := item["name"]; ok {
-			c.Name = fmt.Sprintf("%v", nameVal)
-		}
-
-		// Safe conversion for City
-		if cityVal, ok := item["city"]; ok {
-			c.City = fmt.Sprintf("%v", cityVal)
-		}
-
-		// Safe conversion for Score
-		if scoreVal, ok := item["score"]; ok {
-			if s, ok := scoreVal.(float64); ok {
-				c.Score = s
-			}
-		}
-
-		component = append(component, c)
+	metaByID := make(map[int64]compMeta, len(metas))
+	for _, m := range metas {
+		metaByID[m.ID] = m
 	}
 
-	return component, nil
+	rich := make([]CityComponentScoreRich, 0, len(items))
+	for _, item := range items {
+		r := CityComponentScoreRich{
+			ID: item.id, Index: item.index, Name: item.name, City: item.city, Score: item.score,
+		}
+		if m, ok := metaByID[item.id]; ok {
+			r.HasMap = m.HasMap
+			r.ShortDesc = m.ShortDesc
+			// Parse types JSON array e.g. "{bar,line}" or ["bar","line"]
+			var types []string
+			clean := strings.Trim(m.ChartTypes, "{}")
+			if strings.HasPrefix(m.ChartTypes, "[") {
+				_ = json.Unmarshal([]byte(m.ChartTypes), &types)
+			} else if clean != "" {
+				for _, t := range strings.Split(clean, ",") {
+					types = append(types, strings.TrimSpace(t))
+				}
+			}
+			r.ChartTypes = types
+		}
+		rich = append(rich, r)
+	}
+	return rich, nil
 }
 
+// ComponentChartMeta holds chart capability metadata for a single component, used by AI planning.
+type ComponentChartMeta struct {
+	ChartTypes []string // Exact chart type strings, e.g. ["BarChart", "ColumnChart"]
+	HasMap     bool     // Whether the component has a non-empty map_config
+}
+
+// GetComponentChartMeta returns chart_types and has_map for a single component by ID.
+// It is used by normalizeDisplayPlan to validate and auto-correct AI-generated slide chart_type values.
+func GetComponentChartMeta(componentID int64) (*ComponentChartMeta, error) {
+	var row struct {
+		ChartTypes string `gorm:"column:chart_types"`
+		HasMap     bool   `gorm:"column:has_map"`
+	}
+	err := DBManager.Raw(`
+		SELECT cc.types::text AS chart_types,
+			   (qc.map_config_ids IS NOT NULL AND array_length(qc.map_config_ids,1) > 0) AS has_map
+		FROM components c
+		JOIN component_charts cc ON c.index = cc.index
+		JOIN query_charts qc ON c.index = qc.index
+		WHERE c.id = ?
+		LIMIT 1
+	`, componentID).Scan(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	if row.ChartTypes == "" {
+		return &ComponentChartMeta{}, nil
+	}
+
+	var types []string
+	clean := strings.Trim(row.ChartTypes, "{}")
+	if strings.HasPrefix(row.ChartTypes, "[") {
+		_ = json.Unmarshal([]byte(row.ChartTypes), &types)
+	} else if clean != "" {
+		for _, t := range strings.Split(clean, ",") {
+			trimmed := strings.Trim(strings.TrimSpace(t), `"`)
+			if trimmed != "" {
+				types = append(types, trimmed)
+			}
+		}
+	}
+	return &ComponentChartMeta{ChartTypes: types, HasMap: row.HasMap}, nil
+}
 
 func CreateComponent(index string, name string, city string, historyConfig json.RawMessage, mapFilter json.RawMessage, timeFrom string, timeTo *string, updateFreq *int64, updateFreqUnit string, source string, shortDesc string, longDesc string, useCase string, links pq.StringArray, contributors pq.StringArray) (cityComponent CityComponent, err error) {
     // component := Component{
@@ -550,4 +643,35 @@ func DeleteComponent(id int, index string, mapConfigIDs pq.Int64Array) (deleteCh
 	}
 
 	return true, true, nil
+}
+
+/* ----- Vue Component Models ----- */
+
+// VueComponentResult represents a Vue component search result from Qdrant
+type VueComponentResult struct {
+	ID                string                 `json:"id"`
+	Name              string                 `json:"name"`
+	Path              string                 `json:"path"`
+	Category          string                 `json:"category"`
+	Description       string                 `json:"description"`
+	Purpose           []string               `json:"purpose"`
+	Props             map[string]string      `json:"props"`
+	Tags              []string               `json:"tags"`
+	Dependencies      []string               `json:"dependencies"`
+	UsageExample      string                 `json:"usage_example"`
+	RelatedComponents []string               `json:"related_components"`
+	Score             float64                `json:"score"`
+}
+
+// GetVueComponentByQuery searches for Vue components using vector similarity
+func GetVueComponentByQuery(queryString string, limit int, scoreThreshold float64) (results []VueComponentResult, err error) {
+	// This function will be called by the AI service to search for Vue components
+	// It communicates with the component search API endpoint which uses Qdrant
+	
+	// For now, return empty results - this will be populated by the component indexer service
+	// In production, this should call the component search service via HTTP
+	
+	// Placeholder implementation
+	results = make([]VueComponentResult, 0)
+	return results, nil
 }

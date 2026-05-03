@@ -18,13 +18,60 @@ Please refer to the docs for the [Chinese Version](https://tuic.gov.taipei/docum
 
 [Official Site](https://citydashboard.taipei) | [License](https://github.com/tpe-doit/Taipei-City-Dashboard/blob/main/LICENSE) | [Code of Conduct](https://github.com/tpe-doit/Taipei-City-Dashboard/blob/main/.github/CODE_OF_CONDUCT.md) | [Contribution Guide](https://citydashboard.taipei/documentation/front-end/contribution-overview)
 
-## Quick Start
+## 🚀 Quick Start
 
-Please refer to the [Docs](https://citydashboard.taipei/documentation/front-end/project-setup) for the quick start guide.
+### For Developers - One-Click Docker Deploy
 
-## Documentation
+**No complex setup needed!** Just press **F5** in VS Code:
 
-Check out the complete documentation for Taipei City Dashboard [here](https://citydashboard.taipei/documentation/).
+```bash
+F5 → Select "F5: Docker Quick Deploy"
+# Waits ~3-5 minutes (first time), then <1 minute after
+# Opens: http://localhost:8080
+# Login: admin@admin.com / Admin1234!
+```
+
+Hidden login switch (no code change needed):
+- In the login dialog, hold `Shift` and click the TUIC logo once.
+- This toggles from Taipei Pass login to Email login.
+
+See [DOCKER_QUICK_START.md](./DOCKER_QUICK_START.md) for complete setup guide.
+
+### Manual Setup (if F5 doesn't work)
+
+```bash
+cd docker
+copy .env.template .env  # Windows
+cp .env.template .env    # Mac/Linux
+
+docker network create --driver=bridge --subnet=192.168.128.0/24 --gateway=192.168.128.1 br_dashboard
+docker compose -f docker-compose-db.yaml up -d
+docker compose -f docker-compose-init.yaml up
+docker compose up -d
+```
+
+Then open: http://localhost:8080
+
+## 📚 Core Services
+
+| Service | Port | URL | Purpose |
+|---------|------|-----|----------|
+| Frontend Dashboard | 8080 | http://localhost:8080 | Main UI |
+| Backend API | 8088 | http://localhost:8088/api | Data API |
+| Database Manager | 5432 | `postgres-manager` | Management DB |
+| Data DB | 5432 | `postgres-data` | Dashboard Data |
+| Redis Cache | 6379 | Internal | Caching |
+| pgAdmin | 8889 | http://localhost:8889 | DB Admin |
+| Qdrant Vector DB | 6333 | Internal | AI Features |
+
+## 📖 Documentation
+
+Please refer to the official [Docs](https://citydashboard.taipei/documentation/front-end/project-setup) for comprehensive guides.
+
+For **team members**:
+- [DOCKER_QUICK_START.md](./DOCKER_QUICK_START.md) - One-click deployment guide
+- [.github/skills/README.md](./.github/skills/README.md) - Full tech stack & decision trees
+- [infrastructure-deployment](./.github/skills/infrastructure-deployment/SKILL.md) - DevOps & containerization
 
 ## Contributors
 

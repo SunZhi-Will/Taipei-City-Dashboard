@@ -1,0 +1,5 @@
+conda
+pip
+python=3.10  # 假設你希望保留的 Python 版本
+setuptools
+wheel

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"TaipeiCityDashboardBE/global"
 	"TaipeiCityDashboardBE/logs"
@@ -70,17 +71,44 @@ func ConnectToDatabase(dbConfig global.DatabaseConfig) *gorm.DB {
 		dbConfig.SSLMode,
 	)
 
-	// Establish a connection to the database using gorm.Open and the constructed connection string
-	dbConn, err := gorm.Open(postgres.Open(dbargs), &gorm.Config{})
-	if err != nil {
-		// Log an error and panic if there is an issue connecting to the database
-		logs.FError("Error connecting to %s database: %v", dbConfig.Host, err)
-		panic("Connecting to database error")
+	const (
+		maxAttempts = 30
+		retryDelay  = 2 * time.Second
+	)
+
+	var (
+		dbConn *gorm.DB
+		err    error
+	)
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Retry on startup to tolerate database warm-up and avoid crashing the API container.
+		dbConn, err = gorm.Open(postgres.Open(dbargs), &gorm.Config{})
+		if err == nil {
+			logs.FInfo("%s database connected", dbConfig.Host)
+			return dbConn
+		}
+
+		if attempt < maxAttempts {
+			logs.FWarn(
+				"Connecting to %s database failed (attempt %d/%d): %v. Retrying in %s...",
+				dbConfig.Host,
+				attempt,
+				maxAttempts,
+				err,
+				retryDelay,
+			)
+			time.Sleep(retryDelay)
+		}
 	}
 
-	// Log a success message if the connection is established successfully
-	logs.FInfo("%s database connected", dbConfig.Host)
-	return dbConn
+	logs.FError(
+		"Error connecting to %s database after %d attempts: %v",
+		dbConfig.Host,
+		maxAttempts,
+		err,
+	)
+	panic("Connecting to database error")
 }
 
 // CloseConnects closes the connections to the specified databases.

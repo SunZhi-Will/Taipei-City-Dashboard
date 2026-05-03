@@ -11,6 +11,7 @@ const props = defineProps([
 	"map_config",
 	"map_filter",
 	"map_filter_on",
+	"showColorLegend",
 ]);
 
 const emits = defineEmits([
@@ -40,12 +41,34 @@ const parseSeries = computed(() => {
 	return output;
 });
 
+const guageLegendItems = computed(() => {
+	const colors = Array.isArray(props.chart_config?.color) ? props.chart_config.color : [];
+	const labels = Array.isArray(props.chart_config?.categories) ? props.chart_config.categories : [];
+
+	if (labels.length > 1) {
+		return labels.map((label, index) => ({
+			label,
+			color: colors[index] || "#9ca3af",
+		}));
+	}
+
+	const primaryLabel = props.series?.[0]?.name || "主要指標";
+	return [
+		{ label: primaryLabel, color: colors[0] || "#9dc56e" },
+		{ label: "其餘", color: "#777777" },
+	];
+});
+
 // chartOptions needs to be in the bottom since it uses computed data
 const chartOptions = ref({
 	chart: {
 		toolbar: {
 			show: false,
 		},
+		width: "100%",
+		height: "100%",
+		redrawOnParentResize: true,
+		redrawOnWindowResize: true,
 	},
 	colors: [...props.chart_config.color],
 	labels: props.chart_config.categories ? props.chart_config.categories : [],
@@ -139,14 +162,95 @@ function handleDataSelection(_e, _chartContext, config) {
 </script>
 
 <template>
-  <div v-if="activeChart === 'GuageChart'">
+  <div
+    v-if="activeChart === 'GuageChart'"
+    class="guagechart"
+    :class="{ 'guagechart--with-custom-legend': showColorLegend }"
+  >
     <VueApexCharts
-      width="80%"
-      height="300px"
+      width="100%"
+      height="100%"
       type="radialBar"
       :options="chartOptions"
       :series="parseSeries.series"
       @data-point-selection="handleDataSelection"
     />
+
+    <div
+      v-if="showColorLegend"
+      class="guagechart-legend"
+    >
+      <div
+        v-for="item in guageLegendItems"
+        :key="`guage-legend-${item.label}`"
+        class="guagechart-legend-item"
+      >
+        <span
+          class="guagechart-legend-swatch"
+          :style="{ backgroundColor: item.color }"
+        />
+        <span class="guagechart-legend-label">{{ item.label }}</span>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.guagechart {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+
+	:deep(.vue-apexcharts),
+	:deep(.apexcharts-canvas),
+	:deep(.apexcharts-svg) {
+		width: 100% !important;
+		height: 100% !important;
+	}
+
+	&--with-custom-legend {
+		:deep(.apexcharts-legend) {
+			display: none !important;
+		}
+	}
+
+	&-legend {
+		position: absolute;
+		left: 12px;
+		right: 12px;
+		bottom: 8px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+		align-items: center;
+		justify-content: center;
+		padding: 6px 10px;
+		border-radius: 10px;
+		background: rgba(2, 6, 23, 0.45);
+		backdrop-filter: blur(4px);
+		pointer-events: none;
+
+		&-item {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+
+		&-swatch {
+			width: 10px;
+			height: 10px;
+			border-radius: 999px;
+			flex-shrink: 0;
+			border: 1px solid rgba(255, 255, 255, 0.3);
+		}
+
+		&-label {
+			color: rgba(226, 232, 240, 0.95);
+			font-size: 12px;
+			line-height: 1.2;
+		}
+	}
+}
+</style>

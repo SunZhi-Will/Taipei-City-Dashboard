@@ -34,6 +34,7 @@ func ConfigureRoutes() {
 	configureUserRoutes()
 	configureLMRoutes()
 	configureComponentRoutes()
+	configureVueComponentRoutes()
 	configureDashboardRoutes()
 	configureIssueRoutes()
 	configureIncidentRoutes()
@@ -89,6 +90,14 @@ func configureChatLogRoutes() {
 		chatLogSessionRoutes.GET("/session", controllers.GetALLChatLog)
         chatLogSessionRoutes.GET("/session/:session", controllers.GetChatLogDetailBySession)
 	}
+
+	// Admin-only: KPI stats (protected by IsSysAdm)
+	chatLogAdminRoutes := chatLogRoutes.Group("/")
+	chatLogAdminRoutes.Use(middleware.LimitAPIRequests(global.ComponentLimitAPIRequestsTimes, global.LimitRequestsDuration))
+	chatLogAdminRoutes.Use(middleware.IsSysAdm())
+	{
+		chatLogAdminRoutes.GET("/stats", controllers.GetChatLogStats)
+	}
 }
 
 // configureComponentRoutes configures all component routes.
@@ -123,6 +132,27 @@ func configureComponentRoutes() {
 		componentRoutes.
 			PATCH("/:id/chart", controllers.UpdateComponentChartConfig)
 		componentRoutes.PATCH("/:id/map", controllers.UpdateComponentMapConfig)
+	}
+}
+
+// NEW: Vue Component Routes
+func configureVueComponentRoutes() {
+	vueRoutes := RouterGroup.Group("/components")
+	
+	vueRoutes.Use(middleware.LimitAPIRequests(global.ComponentLimitAPIRequestsTimes, global.LimitRequestsDuration))
+	vueRoutes.Use(middleware.LimitTotalRequests(global.ComponentLimitTotalRequestsTimes, global.LimitRequestsDuration))
+	{
+		vueRoutes.GET("/search", controllers.SearchComponents)
+		vueRoutes.GET("/source/:id", controllers.GetComponentSource)
+		vueRoutes.GET("", controllers.GetAllComponents)
+	}
+	
+	// Admin only
+	adminVueRoutes := RouterGroup.Group("/admin/ai")
+	adminVueRoutes.Use(middleware.IsSysAdm())
+	{
+		adminVueRoutes.POST("/reindex-components", controllers.ReindexComponents)
+		adminVueRoutes.GET("/components/manifest", controllers.ExportComponentsManifest)
 	}
 }
 
@@ -201,10 +231,10 @@ func configureAIRoutes() {
 	aiRoutes := RouterGroup.Group("/ai")
 	aiRoutes.Use(middleware.LimitAPIRequests(global.ComponentLimitAPIRequestsTimes, global.LimitRequestsDuration))
 	aiRoutes.Use(middleware.LimitTotalRequests(global.ComponentLimitTotalRequestsTimes, global.LimitRequestsDuration))
-	aiRoutes.Use(middleware.IsLoggedIn())
-	{
-		aiRoutes.POST("/chat/twai", controllers.ChatWithTWCC)
-	}
+	aiRoutes.POST("/chat/twai", controllers.ChatWithTWCC)
+	
+	// Component search (NEW)
+	aiRoutes.POST("/components/search", controllers.SearchComponents)
 }
 
 // func configureLmRoutes() {

@@ -34,7 +34,7 @@ func New(apiKey, baseURL, model string, timeout int) *TWCC {
 		ModelName:  model,
 		HTTPClient: &http.Client{Timeout: time.Duration(timeout) * time.Second},
 		Temperature: 0.7,
-		MaxTokens:   350,
+		MaxTokens:   1500,
 	}
 }
 
@@ -65,7 +65,14 @@ func (m *TWCC) GenerateContent(ctx context.Context, messages []llms.MessageConte
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
-	logs.FInfo("TWCC Outgoing Request: %s", string(jsonData))
+	logs.FInfo(
+		"TWCC request model=%s stream=%t messages=%d tools=%d has_tool_choice=%t",
+		reqBody.Model,
+		isStreaming,
+		len(reqBody.Messages),
+		len(reqBody.Tools),
+		reqBody.ToolChoice != nil,
+	)
 
 	resp, err := m.doRequest(ctx, jsonData, isStreaming)
 	if err != nil {
@@ -389,7 +396,7 @@ func (p *streamProcessor) toContentResponse(model string) *llms.ContentResponse 
 
 func (m *TWCC) handleStandardResponse(body io.Reader) (*llms.ContentResponse, error) {
 	raw, _ := io.ReadAll(body)
-	logs.FInfo("TWCC Raw Response: %s", string(raw))
+	logs.FInfo("TWCC response received bytes=%d", len(raw))
 
 	var tr TWCCResponse
 	if err := json.Unmarshal(raw, &tr); err != nil {

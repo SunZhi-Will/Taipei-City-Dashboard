@@ -1,0 +1,8 @@
+services:
+  dashboard-fe:
+    ports: !override
+      - "8081:80"
+
+  nginx:
+    ports: !override
+      - "8082:80"

@@ -4,6 +4,7 @@ import (
 	"TaipeiCityDashboardBE/app/services/ai"
 	"TaipeiCityDashboardBE/app/util"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 // AIChatInput matches the Request Schema in specification。https://docs.twcloud.ai/docs/user-guides/twcc/afs/api-and-parameters/api-parameter-information#模型說明
 type AIChatInput struct {
 	SessionID string `json:"session"`
+	AppMode   string `json:"app_mode"` // e.g. "ai_studio"
 	Stream    bool   `json:"stream"`
 	Messages  []struct {
 		Role      string `json:"role" binding:"required,oneof=system user assistant tool"`
@@ -70,6 +72,7 @@ func ChatWithTWCC(c *gin.Context) {
 	_, accountID, _, _, _ := util.GetUserInfoFromContext(c)
 	req := ai.AIChatRequest{
 		SessionID: sessionID,
+		AppMode:   input.AppMode,
 		UserID:    fmt.Sprintf("%d", accountID),
 		IPAddress: c.ClientIP(),
 		Messages:  input.ToServiceMessages(),
@@ -112,7 +115,7 @@ func ChatWithTWCC(c *gin.Context) {
 	}
 
 	// 5. Standard Non-Streaming Response
-	logEntry, err := ai.ChatWithTWCC(c.Request.Context(), req, options...)
+	chatResult, err := ai.ChatWithTWCC(c.Request.Context(), req, options...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status": "error",
@@ -120,6 +123,35 @@ func ChatWithTWCC(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+
+	logEntry := chatResult.Log
+
+	usedTools := chatResult.UsedTools
+	if len(usedTools) == 0 && logEntry.Tools != "" {
+		_ = json.Unmarshal([]byte(logEntry.Tools), &usedTools)
+	}
+
+	answerMode := "agent_chat"
+	for _, toolName := range usedTools {
+		if toolName == "get_component_chart_data" {
+			answerMode = "agent_data_grounded"
+			break
+		}
+	}
+
+	if answerMode == "agent_chat" {
+	for _, toolName := range usedTools {
+		if toolName == "retrieve_components_by_query" {
+			answerMode = "agent_rag"
+			break
+		}
+	}
+	}
+	if chatResult.AgentResult != nil && chatResult.AgentResult.PrimaryComponent != nil {
+		if answerMode == "agent_chat" || answerMode == "agent_rag" {
+			answerMode = "agent_component_selection"
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -133,6 +165,11 @@ func ChatWithTWCC(c *gin.Context) {
 				"total_tokens":  logEntry.TotalTokens,
 			},
 			"tool_used":   logEntry.ToolUsed,
+			"tools":       usedTools,
+			"tool_timeline": chatResult.ToolTimeline,
+			"answer_mode": answerMode,
+			"agent_result": chatResult.AgentResult,
+			"display_plan": chatResult.DisplayPlan,
 			"latency_ms":  logEntry.LatencyMS,
 			"model":       logEntry.Model,
 			"provider":    logEntry.Provider,
