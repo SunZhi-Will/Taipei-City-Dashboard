@@ -145,6 +145,32 @@ const updateFreq = computed(() => {
 	}
 });
 
+// Derives the latest data year/month from series x-values or updated_at
+const chartPeriodLabel = computed(() => {
+	const series = props.config.chart_data;
+	const dates = [];
+	if (Array.isArray(series)) {
+		for (const s of series) {
+			if (Array.isArray(s?.data)) {
+				for (const pt of s.data) {
+					if (typeof pt?.x === "string" && /^\d{4}-\d{2}/.test(pt.x)) dates.push(pt.x.slice(0, 7));
+				}
+			}
+		}
+	}
+	if (dates.length) {
+		dates.sort();
+		const [y, m] = dates[dates.length - 1].split("-");
+		return `${y} 年 ${parseInt(m, 10)} 月`;
+	}
+	const upd = props.config.updated_at;
+	if (upd) {
+		const d = new Date(upd);
+		if (!isNaN(d)) return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月`;
+	}
+	return null;
+});
+
 // The style for the tag tooltip
 const tooltipPosition = computed(() => {
 	if (!mousePosition.value.x || !mousePosition.value.y) {
@@ -421,6 +447,7 @@ function returnChartComponent(name, svg) {
         'halfmapopen-chart': mode === 'halfmap',
       }"
     >
+      <div v-if="chartPeriodLabel" class="dashboardcomponent-period">{{ chartPeriodLabel }}</div>
       <component
         :is="returnChartComponent(item)"
         v-for="item in config.chart_config.types"
@@ -741,6 +768,15 @@ button:hover {
 				cursor: not-allowed;
 			}
 		}
+	}
+
+	&-period {
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--color-highlight);
+		letter-spacing: 0.04em;
+		text-align: right;
+		padding: 2px 4px 4px;
 	}
 
 	&-chart,
