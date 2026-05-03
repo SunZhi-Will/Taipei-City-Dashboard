@@ -34,11 +34,10 @@ const monthlyData = computed(() => {
 	for (const s of props.series) {
 		for (const pt of s.data || []) {
 			if (!isYearMonth(pt.x)) continue;
-			const year = pt.x.slice(0, 4); // "YYYY" — one frame per year
-			if (!year) continue;
-			if (!byMonth[year]) byMonth[year] = {};
-			// Use addition to handle multiple data points for the same year+series
-			byMonth[year][s.name] = (byMonth[year][s.name] ?? 0) + (pt.y ?? 0);
+			const key = pt.x.slice(0, 7); // "YYYY-MM" — one frame per month
+			if (!key) continue;
+			if (!byMonth[key]) byMonth[key] = {};
+			byMonth[key][s.name] = (byMonth[key][s.name] ?? 0) + (pt.y ?? 0);
 		}
 	}
 	const months = Object.keys(byMonth).sort();
