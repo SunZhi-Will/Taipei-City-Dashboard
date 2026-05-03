@@ -1,0 +1,50 @@
+# 縮編 override：把 Airflow 接到 dashboard 的 br_dashboard 網路、砍 mem_limit、改 web port、修 base URL
+# 用法：docker compose up -d airflow-init airflow-webserver airflow-scheduler airflow-worker-default
+# （只起必要 4 個 service，realtime/heavy/triggerer 不啟動）
+
+x-shared-env:
+  &shared-override-env
+  # 蓋掉原本指向 test-citydashboard.taipei 的 base URL，改成本機（沒前綴）
+  AIRFLOW__WEBSERVER__BASE_URL: "http://localhost:8083"
+  AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "False"
+  # D050502 (與其他 DAG) 透過 PostgresHook("postgres_default") 取得寫入用 DB；指向 postgres-data 容器的 dashboard DB
+  AIRFLOW_CONN_POSTGRES_DEFAULT: "postgresql://postgres:devpass@postgres-data:5432/dashboard"
+  # MOENV 環境部 API 在某些主機 SSL 驗證會卡，先關掉避免擋 DAG（有需要再開）
+  MOENV_VERIFY_SSL: "false"
+  # MOENV API key 從 .env 注入；前綴 AIRFLOW_VAR_ 會被 Airflow 自動註冊成 Variable.get("MOENV_API_KEY")
+  AIRFLOW_VAR_MOENV_API_KEY: ${AIRFLOW_VAR_MOENV_API_KEY:-}
+
+services:
+  airflow-webserver:
+    ports: !override
+      - "8083:8080"
+    environment:
+      <<: *shared-override-env
+    mem_limit: "1g"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  airflow-scheduler:
+    environment:
+      <<: *shared-override-env
+    mem_limit: "2g"
+
+  airflow-worker-default:
+    # 開發單 worker 模式：同時消化 default + heavy + realtime queue，避免 monthly DAG 卡 heavy 隊列
+    command: celery worker -q default,heavy,realtime
+    environment:
+      <<: *shared-override-env
+    mem_limit: "2g"
+
+  airflow-init:
+    environment:
+      <<: *shared-override-env
+
+networks:
+  default:
+    name: br_dashboard
+    external: true

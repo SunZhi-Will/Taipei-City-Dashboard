@@ -75,3 +75,16 @@ Taipei-City-Dashboard-DE/docker/prod/.env
 *.py[cod]
 
 *.env
+# Backup files
+*.bak
+
+# Windows ADS metadata（從 NTFS 複製過來的 stream 殘留）
+*:Zone.Identifier
+
+# Airflow runtime dirs（必要存在但不入庫）
+Taipei-City-Dashboard-DE/logs/
+Taipei-City-Dashboard-DE/plugins/
+Taipei-City-Dashboard-DE/data/
+
+# DE / Docker secrets
+Taipei-City-Dashboard-DE/docker/develop/.env
